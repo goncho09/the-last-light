@@ -20,6 +20,10 @@ function _init()
   chispa_efecto = 0  -- la expansion visual
   timer_chispa = 0   -- el tiempo de espera (cooldown)
   
+  -- escenas 
+  
+  escena_actual = 0
+  
   -- posicion inicial
   px = 64 
   py = 64
@@ -59,88 +63,116 @@ function chequea_recoleccion(m)
 end
 
 function _update()
-  -- movimiento
-  if btn(⬅️) then px -= velocidad mirando_izq = true end
-  if btn(➡️) then px += velocidad mirando_izq = false end
-  if btn(⬆️) then py -= velocidad end
-  if btn(⬇️) then py += velocidad end
-  
-  px = mid(0, px, 120)
-  py = mid(16, py, 120) 
-  
-  -- manejo del temporizador de la chispa
-  if timer_chispa > 0 then
-    timer_chispa -= 1
-  end
 
-  -- desvanecimiento de la chispa
-  if chispa_efecto > 0 then
-    chispa_efecto -= 1 -- cae mas lento para que se vea mejor
-  end
-  
-  -- mecanica de chispa corregida
-  if btnp(4) and combustible > 5 and timer_chispa == 0 then
-    chispa_efecto = 20  -- expansion mas moderada
-    combustible -= 5    
-    timer_chispa = 60   -- espera de 2 segundos (60 frames)
-  end
-
-  -- logica de combustible y radio
-  if combustible > 0 then
-    combustible -= 0.05 
-    -- el radio ya no se achica, se mantiene fijo + el efecto
-    radio_luz = radio_base + chispa_efecto
-  else
-    combustible = 0
-    radio_luz = 0
-  end
-  
-  chequea_recoleccion(item_carb)
-		chequea_recoleccion(item_oro)
-		chequea_recoleccion(item_zafiro)
+		if escena_actual == 0 then
+			if btnp(4) or btnp(5) then -- presionar z o x para empezar
+      escena_actual = 1
+   end
+		else if escena_actual  == 1 then
+				-- movimiento
+	  if btn(⬅️) then px -= velocidad mirando_izq = true end
+	  if btn(➡️) then px += velocidad mirando_izq = false end
+	  if btn(⬆️) then py -= velocidad end
+	  if btn(⬇️) then py += velocidad end
+	  
+	  px = mid(0, px, 120)
+	  py = mid(16, py, 120) 
+	  
+	  -- manejo del temporizador de la chispa
+	  if timer_chispa > 0 then
+	    timer_chispa -= 1
+	  end
+	
+	  -- desvanecimiento de la chispa
+	  if chispa_efecto > 0 then
+	    chispa_efecto -= 1 -- cae mas lento para que se vea mejor
+	  end
+	  
+	  -- mecanica de chispa corregida
+	  if btnp(4) and combustible > 5 and timer_chispa == 0 then
+	    chispa_efecto = 20  -- expansion mas moderada
+	    combustible -= 5    
+	    timer_chispa = 60   -- espera de 2 segundos (60 frames)
+	  end
+	
+	  -- logica de combustible y radio
+	  if combustible > 0 then
+	    combustible -= 0.05 
+	    -- el radio ya no se achica, se mantiene fijo + el efecto
+	    radio_luz = radio_base + chispa_efecto
+	  else
+	    combustible = 0
+	    radio_luz = 0
+	  end
+	  
+		 chequea_recoleccion(item_carb)
+			chequea_recoleccion(item_oro)
+			chequea_recoleccion(item_zafiro)
+		end
+end
 end
 
 function _draw()
   cls(0)
   
-  -- 1. mundo y minerales
-  spr(1, px, py, 1, 1, mirando_izq, false)
-  spr(item_carb.spr, item_carb.x, item_carb.y)
-  spr(item_oro.spr, item_oro.x, item_oro.y)
-  spr(item_zafiro.spr, item_zafiro.x, item_zafiro.y)
-  
-  -- luz
-  if radio_luz > 0 then
-    circ(px+4, py+4, radio_luz, 6)
-  end
+  if escena_actual == 0 then
+    local offset_x = cos(t()*0.5) * 4
+    local pulso_luz = 25 + sin(t()*2)*2
+    circfill(63 + offset_x, 61, pulso_luz, 10) 
 
-  -- 2. interfaz (hud)
-  rectfill(0, 0, 127, 15, 0) -- fondo negro
-  line(0, 15, 127, 15, 5)    -- la barra gris divisoria
+    spr(1, 60, 58)  
 
-  -- barras superiores (combustible y vida)
-  print("combustible", 4, 1, 6)
-  rectfill(4, 8, 4 + (combustible / 2.5), 9, 10) 
-  
-  print("vida", 55, 1, 6)
-  rectfill(55, 8, 55 + (vida / 2.5), 9, 11) 
+    print("the last light", 37, 50, 1) 
+    
+    local col_titulo = 7
+    if (rnd(1) > 0.9) col_titulo = 6 
+    print("the last light", 36, 49, col_titulo)
 
-  -- indicadores de minerales (justo arriba de la linea gris)
-  -- usamos y=10 para que esten pegados a la barra divisoria
+    if (flr(t()*2)%2==0) then
+      print("presiona z para comenzar", 16, 90, 6)
+    end
   
-  -- icono de oro (podes usar spr si tenes uno, o un punto de color)
-  print("oro:", 2, 11, 14) 
-  print(oro, 20, 11, 7)
+  elseif escena_actual == 1 then
   
-  -- icono de zafiro
-  print("zafiro:", 42, 11, 12)
-  print(zafiro, 72, 11, 7)
-
-  -- nivel (esquina derecha)
-  print("nv:"..nivel_actual, 100, 10, 6)
-  
-  -- aviso de chispa lista
-  if timer_chispa == 0 then print("!", 92, 10, 10) end
+	  -- 1. mundo y minerales
+	  spr(1, px, py, 1, 1, mirando_izq, false)
+	  spr(item_carb.spr, item_carb.x, item_carb.y)
+	  spr(item_oro.spr, item_oro.x, item_oro.y)
+	  spr(item_zafiro.spr, item_zafiro.x, item_zafiro.y)
+	  
+	  -- luz
+	  if radio_luz > 0 then
+	    circ(px+4, py+4, radio_luz, 6)
+	  end
+	
+	  -- 2. interfaz (hud)
+	  rectfill(0, 0, 127, 15, 0) -- fondo negro
+	  line(0, 15, 127, 15, 5)    -- la barra gris divisoria
+	
+	  -- barras superiores (combustible y vida)
+	  print("combustible", 4, 1, 6)
+	  rectfill(4, 8, 4 + (combustible / 2.5), 9, 10) 
+	  
+	  print("vida", 55, 1, 6)
+	  rectfill(55, 8, 55 + (vida / 2.5), 9, 11) 
+	
+	  -- indicadores de minerales (justo arriba de la linea gris)
+	  -- usamos y=10 para que esten pegados a la barra divisoria
+	  
+	  -- icono de oro (podes usar spr si tenes uno, o un punto de color)
+	  print("oro:", 2, 11, 14) 
+	  print(oro, 20, 11, 7)
+	  
+	  -- icono de zafiro
+	  print("zafiro:", 42, 11, 12)
+	  print(zafiro, 72, 11, 7)
+	
+	  -- nivel (esquina derecha)
+	  print("nv:"..nivel_actual, 100, 10, 6)
+	  
+	  -- aviso de chispa lista
+	  if timer_chispa == 0 then print("!", 92, 10, 10) end
+		end
 end
 __gfx__
 00000000005555000000000000600600000004400000000000000000000000000000000000000000000000000000000000076000000000050000000000000000
