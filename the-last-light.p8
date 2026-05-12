@@ -2,12 +2,42 @@ pico-8 cartridge // http://www.pico-8.com
 version 43
 __lua__
 function respawn_mineral(m)
-  -- m es la tabla del mineral que queremos mover
-  m.x = 8 + rnd(112)
-  -- el limite superior es 20 para no aparecer en el hud
-  m.y = 20 + rnd(100)
+  -- posicion inical separad de pared y hud
+  m.x = 4 + rnd(120)
+  m.y = 24 + rnd(95)
+  
+  -- mantenemos una distancia minima del jugador (px, py)
+  -- para que no te aparezca uno en la cara apenas lo agarras
+  local dist_x = abs(m.x - px)
+  local dist_y = abs(m.y - py)
+  
+  if dist_x < 30 and dist_y < 30 then
+    -- si cayo muy cerca, reintentamos la funcion
+    return respawn_mineral(m)
+  end
+  
   m.activo = true
 end
+
+function crear_varios_minerales(cant, tipo, sprite)
+  for i=1, cant do
+    local m = {
+      tipo = tipo,
+      spr = sprite,
+      activo = true
+    }
+    respawn_mineral(m)
+    add(minerales, m)
+  end
+end
+
+function iniciar_nivel()
+		minerales = {} 
+
+  crear_varios_minerales(2, "carbon", 10)
+end
+
+
 
 function _init()
   -- variables de estado
@@ -35,30 +65,46 @@ function _init()
   oro = 0
   zafiro = 0
   
-  item_carb = {x=0, y=0, spr=10, tipo="carbon"}
-  item_oro = {x=0, y=0, spr=8, tipo="oro"}
-  item_zafiro = {x=0, y=0, spr=9, tipo="zafiro"}
-
-		respawn_mineral(item_carb)
-  respawn_mineral(item_oro)
-  respawn_mineral(item_zafiro)
+  minerales = {}
 end
 
-function chequea_recoleccion(m)
-  -- calculamos distancia entre jugador y el mineral m
-  if abs(px - m.x) < 6 and abs(py - m.y) < 6 then
-    
-    if m.tipo == "carbon" then
-      combustible = mid(0, combustible + 25, 100)
-    elseif m.tipo == "oro" then
-      oro += 1
-    elseif m.tipo == "zafiro" then
-      zafiro += 1
+function obtener_mineral_aleatorio(m)
+  local suerte = rnd(1)
+  
+  if suerte > 0.9 then
+    m.tipo = "zafiro"
+    m.spr = 9
+  elseif suerte > 0.7 then
+    m.tipo = "oro"
+    m.spr = 8
+  else
+    m.tipo = "carbon"
+    m.spr = 10
+  end
+end
+
+function chequea_recoleccion()
+  -- recorremos toda la tabla de minerales generada proceduralmente
+  for m in all(minerales) do
+    -- chequeamos distancia entre jugador (px, py) y cada mineral m
+    if abs(px - m.x) < 6 and abs(py - m.y) < 6 then
+      
+      -- logica segun el tipo de item
+      if m.tipo == "carbon" then
+        -- mid asegura que el combustible no pase de 100
+        combustible = mid(0, combustible + 25, 100)
+      elseif m.tipo == "oro" then
+        oro += 1
+      elseif m.tipo == "zafiro" then
+        zafiro += 1
+      end
+      
+      -- genera un nuevo mineral (aleatoriamente entre los 3)
+      obtener_mineral_aleatorio(m)
+      respawn_mineral(m)
+      
+      -- sfx(1) -- sonido de recolectar
     end
-    
-    -- una vez recolectado, lo mandamos a otro lado
-    respawn_mineral(m)
-    -- sfx(1) -- sonido de recolectar
   end
 end
 
@@ -66,6 +112,7 @@ function _update()
 
 		if escena_actual == 0 then
 			if btnp(4) or btnp(5) then -- presionar z o x para empezar
+      iniciar_nivel()
       escena_actual = 1
    end
 		else if escena_actual  == 1 then
@@ -136,9 +183,12 @@ function _draw()
   
 	  -- 1. mundo y minerales
 	  spr(1, px, py, 1, 1, mirando_izq, false)
-	  spr(item_carb.spr, item_carb.x, item_carb.y)
-	  spr(item_oro.spr, item_oro.x, item_oro.y)
-	  spr(item_zafiro.spr, item_zafiro.x, item_zafiro.y)
+	 	
+	 	for m in all(minerales) do
+    if m.activo then
+      spr(m.spr, m.x, m.y)
+    end
+  	end
 	  
 	  -- luz
 	  if radio_luz > 0 then
