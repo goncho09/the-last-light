@@ -19,53 +19,19 @@ function respawn_mineral(m)
   m.activo = true
 end
 
-function crear_varios_minerales(cant, tipo, sprite)
-  for i=1, cant do
+
+function iniciar_nivel()
+		minerales = {} 
+		
+		for i=1, 2 do
     local m = {
-      tipo = tipo,
-      spr = sprite,
+      tipo = "carbon",
+      spr = 10,
       activo = true
     }
     respawn_mineral(m)
     add(minerales, m)
   end
-end
-
-function iniciar_nivel()
-		minerales = {} 
-
-  crear_varios_minerales(2, "carbon", 10)
-end
-
-
-
-function _init()
-  -- variables de estado
-  combustible = 100
-  vida = 100        
-  radio_base = 15   -- el radio ahora es constante
-  radio_luz = 15    
-  nivel_actual = 1
-  
-  chispa_efecto = 0  -- la expansion visual
-  timer_chispa = 0   -- el tiempo de espera (cooldown)
-  
-  -- escenas 
-  
-  escena_actual = 0
-  
-  -- posicion inicial
-  px = 64 
-  py = 64
-  velocidad = 1.2
-  mirando_izq = false
-  
-  -- minerales
-  carbon = 0
-  oro = 0
-  zafiro = 0
-  
-  minerales = {}
 end
 
 function obtener_mineral_aleatorio(m)
@@ -92,7 +58,7 @@ function chequea_recoleccion()
       -- logica segun el tipo de item
       if m.tipo == "carbon" then
         -- mid asegura que el combustible no pase de 100
-        combustible = mid(0, combustible + 25, 100)
+        oxigeno = mid(0, oxigeno + 25, 100)
       elseif m.tipo == "oro" then
         oro += 1
       elseif m.tipo == "zafiro" then
@@ -106,6 +72,35 @@ function chequea_recoleccion()
       -- sfx(1) -- sonido de recolectar
     end
   end
+end
+
+function _init()
+  -- variables de estado
+  oxigeno = 100
+  vida = 100        
+  radio_base = 15   -- el radio ahora es constante
+  radio_luz = 15    
+  nivel_actual = 1
+  
+  chispa_efecto = 0  -- la expansion visual
+  timer_chispa = 0   -- el tiempo de espera (cooldown)
+  
+  -- escenas 
+  
+  escena_actual = 0
+  
+  -- posicion inicial
+  px = 64 
+  py = 64
+  velocidad = 1.2
+  mirando_izq = false
+  
+  -- minerales
+  carbon = 0
+  oro = 0
+  zafiro = 0
+  
+  minerales = {}
 end
 
 function _update()
@@ -136,19 +131,19 @@ function _update()
 	  end
 	  
 	  -- mecanica de chispa corregida
-	  if btnp(4) and combustible > 5 and timer_chispa == 0 then
+	  if btnp(4) and oxigeno > 5 and timer_chispa == 0 then
 	    chispa_efecto = 20  -- expansion mas moderada
-	    combustible -= 5    
+	    oxigeno -= 5    
 	    timer_chispa = 60   -- espera de 2 segundos (60 frames)
 	  end
 	
 	  -- logica de combustible y radio
-	  if combustible > 0 then
-	    combustible -= 0.05 
+	  if oxigeno > 0 then
+	    oxigeno -= 0.05 
 	    -- el radio ya no se achica, se mantiene fijo + el efecto
 	    radio_luz = radio_base + chispa_efecto
 	  else
-	    combustible = 0
+	    oxigeno = 0
 	    radio_luz = 0
 	  end
 	  
@@ -157,6 +152,42 @@ function _update()
 			chequea_recoleccion(item_zafiro)
 		end
 end
+end
+
+function dibujar_luz_personaje()
+		fillp()
+		
+		-- si esta fuera del radio no mostrar
+		if radio_luz <= 0 then
+    rectfill(0, 0, 128, 128, 0)
+    return
+  end
+  
+		local radio_penumbra = radio_luz + 18
+		
+		for x = 0, 128, 4 do
+    for y = 0, 128, 4 do
+      -- calculamos la distancia entre el pixel actual y el centro del minero
+      local dx = abs((px + 4) - x)
+      local dy = abs((py + 4) - y)
+      local dist_cuadrado = dx * dx + dy * dy
+      
+      -- oscuridad total
+      if dist_cuadrado >= radio_penumbra * radio_penumbra then
+        rectfill(x, y, x + 3, y + 3, 0)
+        
+      -- penumbra con dithering 
+      elseif dist_cuadrado > radio_luz * radio_luz then
+        fillp(0x5a5a) -- patron de tablero de ajedrez
+        rectfill(x, y, x + 3, y + 3, 0.5) -- el .5 lo hace transparente
+      end
+    end
+  end
+		
+  -- limpiar patron
+  fillp()
+  
+  circ(px + 4, py + 4, radio_luz, 6)
 end
 
 function _draw()
@@ -181,27 +212,37 @@ function _draw()
   
   elseif escena_actual == 1 then
   
-	  -- 1. mundo y minerales
-	  spr(1, px, py, 1, 1, mirando_izq, false)
-	 	
+	  -- minerales
 	 	for m in all(minerales) do
     if m.activo then
       spr(m.spr, m.x, m.y)
     end
   	end
 	  
-	  -- luz
-	  if radio_luz > 0 then
-	    circ(px+4, py+4, radio_luz, 6)
-	  end
+	  -- radio de luz
+	  dibujar_luz_personaje()
+	  
+	  -- minero
+	  spr(1, px, py, 1, 1, mirando_izq, false)
+	
+			local ex = px -- coordenada x del encendedor
+			local ey = py + 2 -- coordenada y (un poquito mれくs abajo de la cabeza)
+			
+			if mirando_izq then
+					ex = px - 5
+			  spr(2, ex, ey, 1, 1, true)
+			else
+			   ex = px + 5
+			  spr(2, ex, ey, 1, 1, false)
+			end
 	
 	  -- 2. interfaz (hud)
 	  rectfill(0, 0, 127, 15, 0) -- fondo negro
 	  line(0, 15, 127, 15, 5)    -- la barra gris divisoria
 	
 	  -- barras superiores (combustible y vida)
-	  print("combustible", 4, 1, 6)
-	  rectfill(4, 8, 4 + (combustible / 2.5), 9, 10) 
+	  print("oxigeno", 4, 1, 6)
+	  rectfill(4, 8, 4 + (oxigeno / 2.5), 9, 10) 
 	  
 	  print("vida", 55, 1, 6)
 	  rectfill(55, 8, 55 + (vida / 2.5), 9, 11) 
