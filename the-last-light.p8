@@ -48,15 +48,18 @@ function generar_cueva_aleatoria()
     end
   end
 
+  -- 2. el excavador inicia en la zona del jugador
   local wx = 3
   local wy = 3
   
+  -- despejar un れくrea inicial amplia y segura de 4x4 tiles alrededor del spawn
   for x=1,4 do
     for y=1,4 do
       mset(x,y,0)
     end
   end
 
+  -- tallar pasillos usando una brocha de 2x2 (cuevas mas anchas y fluidas)
   local suelo_objetivo = 280 
   local suelo_tallado = 16
 
@@ -68,6 +71,7 @@ function generar_cueva_aleatoria()
     elseif dir == 3 and wy < 29 then wy += 1
     end
 
+    -- limpiamos en bloque de 2x2 para evitar pasillos de un solo tile de ancho
     for dx=0,1 do
       for dy=0,1 do
         local tile = mget(wx+dx, wy+dy)
@@ -85,10 +89,12 @@ function cargar_nivel(n)
   timer_tutorial = (n == 1) and 300 or 0
 
   if n == 1 then
+    -- restaura el mapa guardado en el cartucho para el tutorial
     reload(0x2000, 0x2000, 0x1000)
     combustible  = 100
     texto_tutorial  = "enciende la antorcha\ncon z para abrir salida."
   else
+    -- generar cueva procedimental mejorada para niveles superiores
     generar_cueva_aleatoria()
     combustible  = mid(40, 95 - (n * 3), 100) 
     texto_tutorial  = ""
