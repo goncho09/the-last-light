@@ -15,26 +15,35 @@ function _init()
 
   px = 24
   py = 24
+  velocidad_base = 1.1
   velocidad = 1.1
   mirando_izq = false
   vida = 100
+  
+  -- control de danio continuo (i-frames)
+  timer_inmunidad = 0
 
-  radio_base = 18
-  radio_luz  = 18
+  radio_base = 23
+  radio_luz  = 23
   chispa_efecto = 0
   timer_chispa  = 0
 
+  -- estado de envenenamiento
+  envenenado = false
+  timer_envenenamiento = 0
+  burbujas_veneno = {} 
+
   minerales = {}
+  enemigos = {} 
 end
 
 function generar_cueva_aleatoria()
-  -- 1. llenar el mapa con una mezcla de muros normales (14) y con musgo (30)
   for x=0,31 do
     for y=0,31 do
       if rnd(1) > 0.25 then
         mset(x, y, 14)
       else
-        mset(x, y, 30) -- variedad visual con musgo
+        mset(x, y, 30) 
       end
     end
   end
@@ -91,15 +100,15 @@ function cargar_nivel(n)
     texto_tutorial  = ""
   end
 
-  -- spawn seguro del jugador 
-  -- para que no se genere fuera del mapa
   px = 24
   py = 24
+  timer_inmunidad = 0 
 
   antorcha.encendida = false
   antorcha.spr = 16
 
   local dist_minima = 65  
+  local dist_minima_spawn = (n == 1) and 60 or 110 
   local intentos = 0
 
   repeat
@@ -109,7 +118,6 @@ function cargar_nivel(n)
       item_salida.x = 16 + rnd(35)
       item_salida.y = 24 + rnd(70)
     else
-      -- coordenadas libres por los pasillos excavados
       antorcha.x = 16 + rnd(200)
       antorcha.y = 16 + rnd(200)
       item_salida.x = 16 + rnd(200)
@@ -120,18 +128,71 @@ function cargar_nivel(n)
     local dy = antorcha.y - item_salida.y
     local dist_ok = (dx*dx + dy*dy > dist_minima*dist_minima)
 
-    local ant_libre = not solido(antorcha.x, antorcha.y)
-                  and not solido(antorcha.x+7, antorcha.y+7)
-    local sal_libre = not solido(item_salida.x, item_salida.y)
-                  and not solido(item_salida.x+7, item_salida.y+7)
+    local pdx = antorcha.x - px
+    local pdy = antorcha.y - py
+    local dist_p_ok = (pdx*pdx + pdy*pdy > dist_minima_spawn*dist_minima_spawn)
+
+    local ant_libre = posicion_libre(antorcha.x, antorcha.y)
+    local sal_libre = posicion_libre(item_salida.x, item_salida.y)
 
     intentos += 1
-  until (dist_ok and ant_libre and sal_libre) or intentos > 500
+  until (dist_ok and dist_p_ok and ant_libre and sal_libre) or intentos > 500
 
   item_salida.activo = false
   item_salida.spr = 17
 
   iniciar_minerales_nivel()
+  iniciar_enemigos_nivel(n) 
+end
+
+function iniciar_enemigos_nivel(n)
+  enemigos = {}
+  if n > 1 then
+    local num_serpientes = 2
+    local num_escorpiones = 1
+
+    if n >= 6 then
+      num_serpientes = 2
+      num_escorpiones = 2
+    end
+
+    -- spawn de serpientes con zona segura
+    for i=1, num_serpientes do
+      local ex, ey
+      local intentos = 0
+      repeat
+        ex = 16 + rnd(200)
+        ey = 16 + rnd(200)
+        
+        -- calcular distancia al spawn del jugador (px, py)
+        local dx = ex - px
+        local dy = ey - py
+        local dist_segura = (dx*dx + dy*dy > 70*70) -- minimo 70 pixeles de distancia
+        
+        intentos += 1
+      until (posicion_libre(ex, ey) and dist_segura) or intentos > 200
+      
+      add(enemigos, {tipo="serpiente", spr=5, x=ex, y=ey, vx=0, vy=0, v_base=0.35, radio_vision=55, daれねo=5, confundido=false, timer_confusion=0})
+    end
+    
+    -- spawn de escorpiones con zona segura
+    for i=1, num_escorpiones do
+      local ex, ey
+      local intentos = 0
+      repeat
+        ex = 16 + rnd(200)
+        ey = 16 + rnd(200)
+        
+        local dx = ex - px
+        local dy = ey - py
+        local dist_segura = (dx*dx + dy*dy > 70*70) -- minimo 70 pixeles de distancia
+        
+        intentos += 1
+      until (posicion_libre(ex, ey) and dist_segura) or intentos > 200
+      
+      add(enemigos, {tipo="escorpion", spr=4, x=ex, y=ey, vx=0, vy=0, v_base=0.2, radio_vision=45, daれねo=10, confundido=false, timer_confusion=0})
+    end
+  end
 end
 
 function iniciar_minerales_nivel()
@@ -164,7 +225,7 @@ function respawn_mineral(m)
     local dist_x = abs(m.x - px)
     local dist_y = abs(m.y - py)
     intentos += 1
-  until (not solido(m.x, m.y) and not solido(m.x+7, m.y+7) and (dist_x > 25 or dist_y > 25)) or intentos > 100
+  until (posicion_libre(m.x, m.y) and (dist_x > 25 or dist_y > 25)) or intentos > 100
   
   m.activo = true
 end
@@ -187,6 +248,97 @@ function solido(x, y)
   return fget(mget(flr(x/8), flr(y/8)), 0)
 end
 
+function posicion_libre(x, y)
+  return not solido(x, y)
+     and not solido(x + 7, y)
+     and not solido(x, y + 7)
+     and not solido(x + 7, y + 7)
+end
+
+function aplicar_ataque_enemigo(e)
+  if timer_inmunidad > 0 then return end 
+  
+  vida = mid(0, vida - e.daれねo, 100)
+  timer_inmunidad = 45 
+  
+  if e.tipo == "escorpion" and not envenenado then
+    envenenado = true
+    timer_envenenamiento = 180 
+    velocidad = velocidad_base * 0.7 
+    for i=1, 4 do
+      crear_burbuja_veneno()
+    end
+  end
+end
+
+function crear_burbuja_veneno()
+  local b = {
+    x = px + 2 + rnd(4),
+    y = py + 2 + rnd(4),
+    vx = rnd(0.4) - 0.2,
+    vy = rnd(0.4) - 0.2,
+    spr = 19,
+    vida_util = 20 + rnd(20)
+  }
+  add(burbujas_veneno, b)
+end
+
+function actualizar_burbujas_veneno()
+  for b in all(burbujas_veneno) do
+    b.x += b.vx
+    b.y += b.vy
+    b.vida_util -= 1
+    if b.vida_util <= 0 then
+      del(burbujas_veneno, b)
+    end
+  end
+end
+
+function actualizar_enemigos()
+  for e in all(enemigos) do
+    if e.confundido then
+      e.timer_confusion -= 1
+      e.vx = 0
+      e.vy = 0
+      if e.timer_confusion <= 0 then
+        e.confundido = false
+      end
+    else
+      local dx = e.x - px
+      local dy = e.y - py
+      local dist_sq = dx*dx + dy*dy
+      local vis_sq = e.radio_vision * e.radio_vision
+      
+      if dist_sq < vis_sq then
+        local dist = sqrt(dist_sq)
+        if dist > 0 then
+          e.vx = (dx / dist) * -e.v_base
+          e.vy = (dy / dist) * -e.v_base
+        end
+      else
+        e.vx = 0
+        e.vy = 0
+      end
+    end
+    
+    local nx, ny = e.x + e.vx, e.y + e.vy
+    if e.vx ~= 0 then
+      if posicion_libre(nx, e.y) then
+        e.x = nx
+      end
+    end
+    if e.vy ~= 0 then
+      if posicion_libre(e.x, ny) then
+        e.y = ny
+      end
+    end
+    
+    if timer_inmunidad <= 0 and not e.confundido and abs(px - e.x) < 6 and abs(py - e.y) < 6 then
+      aplicar_ataque_enemigo(e)
+    end
+  end
+end
+
 function _update()
   if escena_actual == 0 then
     if btnp(4) or btnp(5) then 
@@ -201,6 +353,24 @@ function _update()
     return
   end
 
+  if timer_inmunidad > 0 then timer_inmunidad -= 1 end
+
+  if envenenado then
+    timer_envenenamiento -= 1
+    if timer_envenenamiento % 60 == 0 then
+      vida = mid(0, vida - 1, 100)
+    end
+    if flr(t()*4) % 2 == 0 then
+      crear_burbuja_veneno()
+    end
+    actualizar_burbujas_veneno()
+    if timer_envenenamiento <= 0 then
+      envenenado = false
+      velocidad = velocidad_base
+      burbujas_veneno = {}
+    end
+  end
+
   local dx, dy = 0, 0
   if btn(0) then dx -= velocidad  mirando_izq = true  end
   if btn(1) then dx += velocidad  mirando_izq = false end
@@ -209,15 +379,13 @@ function _update()
 
   if dx ~= 0 then
     local nx = px + dx
-    if not solido(nx,py) and not solido(nx+7,py) and
-       not solido(nx,py+7) and not solido(nx+7,py+7) then
+    if posicion_libre(nx, py) then
       px = nx
     end
   end
   if dy ~= 0 then
     local ny = py + dy
-    if not solido(px,ny) and not solido(px+7,ny) and
-       not solido(px,ny+7) and not solido(px+7,ny+7) then
+    if posicion_libre(px, ny) then
       py = ny
     end
   end
@@ -229,6 +397,16 @@ function _update()
     chispa_efecto = 15
     combustible  -= 10
     timer_chispa  = 100
+
+    local radio_cegado = radio_base + 25 
+    for e in all(enemigos) do
+      local edx = e.x - px
+      local edy = e.y - py
+      if edx*edx + edy*edy < radio_cegado*radio_cegado then
+        e.confundido = true
+        e.timer_confusion = 180 
+      end
+    end
 
     if not antorcha.encendida then
       local adx = abs((px+4) - (antorcha.x+4))
@@ -260,6 +438,8 @@ function _update()
   end
 
   if timer_tutorial > 0 then timer_tutorial -= 1 end
+  
+  actualizar_enemigos()
 end
 
 function chequea_recoleccion()
@@ -317,10 +497,10 @@ function _draw()
 
     print("the last light", 37, 50, 1) 
     local col_titulo = 7
-    if (rnd(1) > 0.9) col_titulo = 6 
+    if rnd(1) > 0.9 then col_titulo = 6 end
     print("the last light", 36, 49, col_titulo)
 
-    if (flr(t()*2)%2==0) then
+    if flr(t()*2)%2==0 then
       print("presiona z para comenzar", 16, 90, 6)
     end
     return
@@ -350,20 +530,42 @@ function _draw()
     if m.activo then spr(m.spr, m.x, m.y) end
   end
 
+  for e in all(enemigos) do
+    spr(e.spr, e.x, e.y)
+    if e.confundido then
+      spr(18, e.x, e.y - 6) 
+    end
+  end
+
   spr(antorcha.spr, antorcha.x, antorcha.y)
   spr(item_salida.spr, item_salida.x, item_salida.y)
 
-  palt(0, true)
-  spr(1, px, py, 1, 1, mirando_izq)
-  
-  local ex = px
-  local ey = py + 2
-  if mirando_izq then
-    spr(2, px - 5, ey, 1, 1, true)
-  else
-    spr(2, px + 5, ey, 1, 1, false)
+  local mostrar_jugador = true
+  if timer_inmunidad > 0 and flr(t()*15) % 2 == 0 then
+    mostrar_jugador = false
   end
-  palt()
+
+  if mostrar_jugador then
+    palt(0, true)
+    spr(1, px, py, 1, 1, mirando_izq)
+    
+    local ex = px
+    local ey = py + 2
+    if mirando_izq then
+      spr(2, px - 5, ey, 1, 1, true)
+    else
+      spr(2, px + 5, ey, 1, 1, false)
+    end
+    palt()
+  end
+
+  if envenenado then
+    palt(0, true) 
+    for b in all(burbujas_veneno) do
+      spr(b.spr, b.x, b.y)
+    end
+    palt()
+  end
 
   camera()
 
