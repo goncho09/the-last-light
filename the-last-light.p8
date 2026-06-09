@@ -436,6 +436,7 @@ function dibujar_luz_personaje(scx, scy)
     return
   end
 
+<<<<<<< HEAD
   local radio_final = radio_luz 
   local d1 = radio_final + 6
   local d2 = radio_final + 14
@@ -456,11 +457,31 @@ function dibujar_luz_personaje(scx, scy)
         fillp(0x8888)
   rectfill(x, y, x+3, y+3, 0)
 end
+=======
+  local radio_penumbra = radio_luz + 14
+
+  for x = 0, 128, 4 do
+    for y = 16, 128, 4 do
+      local dx          = abs(scx - x)
+      local dy          = abs(scy - y)
+      local dist_cuadrado = dx * dx + dy * dy
+
+      if dist_cuadrado >= radio_penumbra * radio_penumbra then
+        rectfill(x, y, x + 3, y + 3, 0)
+      elseif dist_cuadrado > radio_luz * radio_luz then
+        fillp(0x5a5a)
+        rectfill(x, y, x + 3, y + 3, 0)
+      end
+>>>>>>> faaa64b6104e6097d28be13c917d6476c337b897
     end
   end
   fillp()
 
+<<<<<<< HEAD
   circ(scx, scy, radio_final, 6)
+=======
+  circ(scx, scy, radio_luz, 6)
+>>>>>>> faaa64b6104e6097d28be13c917d6476c337b897
 end
 
 function dibujar_titulo()
