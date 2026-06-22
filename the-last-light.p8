@@ -24,7 +24,6 @@ function _init()
     oro = 0
     zafiro = 0
     nivel_actual = 1
-    timer_tutorial = 300
 
     antorcha = { x = 60, y = 60, spr = spr_antorcha, encendida = false }
     item_salida = { x = 90, y = 40, spr = spr_salida, activo = false }
@@ -126,26 +125,22 @@ end
 
 function cargar_nivel(n)
     nivel_actual = n
-    timer_tutorial = (n == 1) and 300 or 0
     descanso = false
 
     if n == 1 then
         music(0)
         reload(0x2000, 0x2000, 0x1000)
         combustible = 100
-        texto_tutorial = "enciende la antorcha\ncon z para abrir salida."
         px = 24
         py = 24
     elseif n == 10 then
         reload(0x2000, 0x2000, 0x1000)
         combustible = 100
-        texto_tutorial = ""
         px = 272
         py = 16
     else
         generar_cueva_aleatoria()
         combustible = mid(40, 95 - (n * 3), 100)
-        texto_tutorial = ""
         px = 24
         py = 24
     end
@@ -219,7 +214,7 @@ function iniciar_enemigos_nivel(n)
             add(enemigos, spawn_enemigo("escorpion", spr_escorpion, 0.2, 45, 10))
         end
     elseif n == 10 then
-        -- aqui podras aれねadir tu jefe manualmente en el futuro
+        -- jefe  en el futuro
     end
 end
 
@@ -402,8 +397,15 @@ end
 function _update()
     if escena_actual == 0 then
         if btnp(4) or btnp(5) then
-            cargar_nivel(1)
             escena_actual = 1
+        end
+        return
+    end
+
+    if escena_actual == 1 then
+        if btnp(4) or btnp(5) then
+            cargar_nivel(1)
+            escena_actual = 2
         end
         return
     end
@@ -548,8 +550,6 @@ function _update()
         radio_luz = radio_base - (radio_base * (timer_apertura / 40))
     end
 
-    if timer_tutorial > 0 then timer_tutorial -= 1 end
-
     actualizar_enemigos()
 end
 
@@ -667,10 +667,6 @@ function dibujar_hud()
     if timer_chispa == 0 and combustible > 5 then
         print("z", 92, 10, 10)
     end
-
-    if timer_tutorial > 0 and texto_tutorial != "" then
-        print(texto_tutorial, 20, 40, 7)
-    end
 end
 
 function dibujar_juego()
@@ -771,9 +767,30 @@ function dibujar_nivel_superado()
     end
 end
 
+function dibujar_instrucciones()
+    cls(0)
+    print("como jugar", 44, 10, 7)
+
+    print("flechas: moverse", 8, 26, 6)
+    print("z: chispa", 8, 36, 6)
+    print("obten carbon para sobrevivir", 8, 46, 6)
+    print("oro y zafiros = monedas", 8, 56, 6)
+    print("cuidado con los enemigos", 8, 66, 6)
+    print("para ganar:", 8, 76, 6)
+    print("-enciende la antorcha", 12, 86, 6)
+    print("-busca la salida del nivel", 12, 96, 6)
+
+    if flr(t() * 2) % 2 == 0 then
+        print("z: inciar juego", 38, 115, 10)
+    end
+end
+
 function _draw()
     if escena_actual == 0 then
         dibujar_titulo() return
+    end
+    if escena_actual == 1 then
+        dibujar_instrucciones() return
     end
     if vida <= 0 then
         dibujar_game_over() return
