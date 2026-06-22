@@ -81,7 +81,7 @@ function generar_cueva_aleatoria()
     local wy = 3
 
     for x = 1, 4 do
-        for y = 1, 4 do
+        for y = 4, 7 do
             mset(x, y, 0)
         end
     end
@@ -132,17 +132,17 @@ function cargar_nivel(n)
         reload(0x2000, 0x2000, 0x1000)
         combustible = 100
         px = 24
-        py = 24
+        py = 32
     elseif n == 10 then
         reload(0x2000, 0x2000, 0x1000)
         combustible = 100
         px = 272
-        py = 16
+        py = 32
     else
         generar_cueva_aleatoria()
         combustible = mid(40, 95 - (n * 3), 100)
         px = 24
-        py = 24
+        py = 35
     end
 
     timer_inmunidad = 0
@@ -164,14 +164,14 @@ function cargar_nivel(n)
         repeat
             if n == 1 then
                 antorcha.x = 60 + rnd(50)
-                antorcha.y = 24 + rnd(70)
+                antorcha.y = 35 + rnd(70)
                 item_salida.x = 16 + rnd(35)
                 item_salida.y = 24 + rnd(70)
             else
                 antorcha.x = 16 + rnd(200)
-                antorcha.y = 16 + rnd(200)
+                antorcha.y = 35 + rnd(200)
                 item_salida.x = 16 + rnd(200)
-                item_salida.y = 16 + rnd(200)
+                item_salida.y = 35 + rnd(200)
             end
             intentos += 1
         until (posicion_valida_objeto(antorcha.x, antorcha.y, dist_minima, dist_minima_spawn)
@@ -189,7 +189,7 @@ function spawn_enemigo(tipo, spr, v_base, radio_vision, danio)
     local ex, ey, intentos = 0, 0, 0
     repeat
         ex = 16 + rnd(200)
-        ey = 16 + rnd(200)
+        ey = 35 + rnd(200)
         local dx = ex - px
         local dy = ey - py
         intentos += 1
@@ -243,10 +243,10 @@ function respawn_mineral(m)
     repeat
         if nivel_actual == 1 then
             m.x = 16 + rnd(90)
-            m.y = 24 + rnd(80)
+            m.y = 35 + rnd(80)
         else
             m.x = 16 + rnd(200)
-            m.y = 16 + rnd(200)
+            m.y = 35 + rnd(200)
         end
         dist_x = abs(m.x - px)
         dist_y = abs(m.y - py)
@@ -456,7 +456,9 @@ function _update()
     end
     if dy ~= 0 then
         local ny = py + dy
-        if posicion_libre(px, ny) then py = ny end
+        if posicion_libre(px, ny) and ny >= 30 then
+            py = ny
+        end
     end
 
     if px ~= pos_ant_x or py ~= pos_ant_y then
@@ -654,18 +656,30 @@ function dibujar_game_over()
 end
 
 function dibujar_hud()
-    rectfill(0, 0, 127, 15, 0)
-    line(0, 15, 127, 15, 0)
-    print("combustible", 4, 1, 6)
-    rectfill(4, 8, 4 + (combustible / 2.5), 9, 10)
-    print("vida", 55, 1, 6)
-    rectfill(55, 8, 55 + (vida / 2.5), 9, 11)
-    print("oro:" .. oro, 2, 11, 14)
-    print("zafiro:" .. zafiro, 42, 11, 12)
-    print("nv:" .. nivel_actual, 100, 10, 6)
+    rectfill(0, 0, 127, 28, 1)
+    rectfill(0, 0, 127, 27, 0)
+    line(0, 27, 127, 27, 5)
+
+    print("combustible", 4, 2, 6)
+    rect(4, 9, 60, 13, 5)
+    rectfill(5, 10, 5 + (combustible / 1.85), 12, 9)
+
+    print("vida", 67, 2, 6)
+    rect(67, 9, 123, 13, 5)
+    rectfill(68, 10, 68 + (vida / 1.85), 12, 8)
+
+    line(63, 1, 63, 16, 5)
+
+    spr(spr_oro, 2, 19)
+    print(oro, 10, 20, 14)
+
+    spr(spr_zafiro, 26, 18)
+    print(zafiro, 34, 20, 12)
+
+    print("nv" .. nivel_actual, 100, 20, 6)
 
     if timer_chispa == 0 and combustible > 5 then
-        print("z", 92, 10, 10)
+        print("z", 118, 20, 10)
     end
 end
 
