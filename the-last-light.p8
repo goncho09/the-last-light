@@ -66,6 +66,7 @@ function _init()
     descanso = false
 
     paused = false
+    timer_intro = 60
 end
 
 function generar_cueva_aleatoria()
@@ -401,6 +402,11 @@ function actualizar_hoguera()
 end
 
 function _update()
+    if timer_intro > 0 then
+        timer_intro -= 1
+        return
+    end
+
     if escena_actual == 0 then
         if btnp(4) or btnp(5) then
             escena_actual = 1
@@ -864,6 +870,17 @@ function dibujar_victoria()
 end
 
 function _draw()
+    if timer_intro > 0 then
+        cls(0)
+        local progreso = 60 - timer_intro
+        local radio = progreso * 1.5
+        circfill(64, 64, radio, 10)
+        if radio > 20 then
+            print("the last light", 36, 60, 7)
+        end
+        return
+    end
+
     if escena_actual == 0 then
         dibujar_titulo() return
     end
