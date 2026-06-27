@@ -40,6 +40,8 @@ function _init()
     mirando_izq = false
     vida = 100
 
+    sonido_gameover_sonado = false
+
     timer_inmunidad = 0
 
     radio_base = 23
@@ -53,6 +55,9 @@ function _init()
 
     minerales = {}
     enemigos = {}
+
+    textos_flotantes = {}
+    timer_flash_dano = 0
 
     -- transicion
     timer_transicion = 0
@@ -73,6 +78,27 @@ function _init()
 
     paused = false
     timer_intro = 60
+end
+
+function crear_texto_flotante(x, y, tipo)
+    local texto = "+1"
+    local color = 7
+    if tipo == "oro" then
+        color = 14
+    elseif tipo == "zafiro" then
+        color = 12
+    end
+    add(textos_flotantes, { x = x, y = y, texto = texto, color = color, vida = 30 })
+end
+
+function actualizar_textos_flotantes()
+    for tf in all(textos_flotantes) do
+        tf.y -= 0.4
+        tf.vida -= 1
+        if tf.vida <= 0 then
+            del(textos_flotantes, tf)
+        end
+    end
 end
 
 function generar_cueva_aleatoria()
@@ -296,6 +322,7 @@ function aplicar_ataque_enemigo(e)
 
     vida = mid(0, vida - e.danio, 100)
     timer_inmunidad = 30
+    timer_flash_dano = 6
     sfx(7)
 
     if e.tipo == "escorpion" and not envenenado then
@@ -448,8 +475,13 @@ function _update()
     if pausado then return end
 
     if vida <= 0 then
+        if not sonido_gameover_sonado then
+            sfx(11)
+            sonido_gameover_sonado = true
+        end
         timer_auto_volver += 1
         if btn(5) or timer_auto_volver > 300 then
+            sonido_gameover_sonado = false
             _init()
         end
         return
@@ -460,6 +492,7 @@ function _update()
     -- pausa total mientras decide
 
     if timer_inmunidad > 0 then timer_inmunidad -= 1 end
+    if timer_flash_dano > 0 then timer_flash_dano -= 1 end
 
     if envenenado then
         timer_envenenamiento -= 1
@@ -583,6 +616,7 @@ function _update()
             mostrando_nivel_superado = false
             if nivel_pendiente > 10 then
                 escena_actual = 3
+                sfx(10)
             else
                 cargar_nivel(nivel_pendiente)
                 timer_apertura = 20
@@ -597,20 +631,23 @@ function _update()
     end
 
     actualizar_enemigos()
+    actualizar_textos_flotantes()
 end
 
 function chequea_recoleccion()
     for m in all(minerales) do
         if m.activo and abs(px - m.x) < 7 and abs(py - m.y) < 7 then
             if m.tipo == "carbon" then
-                combustible = mid(0, combustible + 15, 100)
+                combustible = mid(0, combustible + 25, 100)
                 sfx(5)
             elseif m.tipo == "oro" then
                 oro += 1
                 sfx(5)
+                crear_texto_flotante(m.x, m.y, m.tipo)
             elseif m.tipo == "zafiro" then
                 zafiro += 1
                 sfx(5)
+                crear_texto_flotante(m.x, m.y, m.tipo)
             end
             obtener_mineral_aleatorio(m)
             respawn_mineral(m)
@@ -726,10 +763,14 @@ function dibujar_hud()
     spr(spr_zafiro, 26, 18)
     print(zafiro, 34, 20, 12)
 
-    print("nv" .. nivel_actual .. "/" .. nivel_max, 95, 20, 6)
+    print("nv" .. nivel_actual .. "/" .. nivel_max, 90, 20, 6)
 
     if timer_chispa == 0 and combustible > 5 then
-        print("z", 118, 20, 10)
+        rect(119, 17, 125, 25, 10)
+        print("z", 121, 19, 10)
+    else
+        rect(119, 17, 125, 25, 5)
+        print("z", 121, 19, 5)
     end
 end
 
@@ -743,9 +784,14 @@ function dibujar_juego()
 
     local shake_x, shake_y = 0, 0
     local vida_critica = vida < 20 and vida > 0
+
     if vida_critica then
         shake_x = rnd(0.6) - 0.3
         shake_y = rnd(0.6) - 0.3
+    end
+
+    if timer_flash_dano > 0 then
+        rect(0, 0, 127, 127, 8)
     end
 
     camera(cam_x + shake_x, cam_y + shake_y)
@@ -755,7 +801,14 @@ function dibujar_juego()
     map(0, 0, 0, 0, 32, 32)
 
     for m in all(minerales) do
-        if m.activo then spr(m.spr, m.x, m.y) end
+        if m.activo then
+            local bob = sin(t() * 3 + m.x) * 0.4
+            spr(m.spr, m.x, m.y + bob)
+        end
+    end
+
+    for tf in all(textos_flotantes) do
+        print(tf.texto, tf.x, tf.y, tf.color)
     end
 
     for e in all(enemigos) do
@@ -788,7 +841,7 @@ function dibujar_juego()
     if envenenado then
         palt(0, true)
         for b in all(burbujas_veneno) do
-            spr(b.spr, b.x, b.y)
+            sspr(b.spr % 16 * 8, flr(b.spr / 16) * 8, 8, 8, b.x, b.y, 4, 4)
         end
         palt()
     end
@@ -818,7 +871,7 @@ function dibujar_juego()
         rectfill(18, 48, 110, 88, 0)
         rect(17, 47, 111, 89, 7)
 
-        print("¿deseas descansar?", 24, 54, 7)
+        print("るよdeseas descansar?", 24, 54, 7)
         print("recuperara tu vida", 24, 62, 6)
 
         if opcion_hoguera == 1 then
@@ -837,11 +890,16 @@ function dibujar_nivel_superado()
     local texto = "nivel " .. (nivel_pendiente - 1) .. " superado!"
     local ancho = #texto * 4
     local x = (128 - ancho) / 2
-    print(texto, x, 55, 7)
+    print(texto, x, 45, 7)
+
+    local resumen = "oro:" .. oro .. "  zafiros:" .. zafiro
+    local x2 = (128 - #resumen * 4) / 2
+    print(resumen, x2, 58, 6)
+
     if flr(t() * 2) % 2 == 0 then
         local texto2 = "preparate..."
-        local x2 = (128 - #texto2 * 4) / 2
-        print(texto2, x2, 68, 6)
+        local x2b = (128 - #texto2 * 4) / 2
+        print(texto2, x2b, 75, 6)
     end
 end
 
@@ -1026,6 +1084,8 @@ __sfx__
 000800000c0100e0100e0100f0101002011020130201402015030160301703019030190401a0401b0401c0401d0501e0501f05020060220602306024060250702607028070290702a0002b0002c0002e0002f000
 000400001f1701614013130101200c110020100311027100191001b100000001b10000000191001e100191001e100191000000000000000000000000000000000000000000000000000000000000000000000000
 0004000024670206601a65016640106300c6200261000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+001000000d0500d0500e0500e0500e0500f0500f05010050180501b0501c0501d0501d0501b0501c0501c0502705025050270502705026050270502605026050310502e0502f0502e0502d0502e0502e0502d050
+001000003506034040330403404033040320403004030040250402104022040210302203020030200301f03017030160201602015020140201202011020140200d0200a0200a020090100c0100b0100c01009010
 __music__
 01 00014344
 02 00014344
