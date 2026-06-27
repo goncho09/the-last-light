@@ -76,30 +76,11 @@ function _init()
     opcion_hoguera = 1
     descanso = false
 
-    paused = false
     timer_intro = 60
 end
 
-function crear_texto_flotante(x, y, tipo)
-    local texto = "+1"
-    local color = 7
-    if tipo == "oro" then
-        color = 14
-    elseif tipo == "zafiro" then
-        color = 12
-    end
-    add(textos_flotantes, { x = x, y = y, texto = texto, color = color, vida = 30 })
-end
-
-function actualizar_textos_flotantes()
-    for tf in all(textos_flotantes) do
-        tf.y -= 0.4
-        tf.vida -= 1
-        if tf.vida <= 0 then
-            del(textos_flotantes, tf)
-        end
-    end
-end
+-->8
+-- generacion de nivel
 
 function generar_cueva_aleatoria()
     for x = 0, 31 do
@@ -258,9 +239,8 @@ end
 function iniciar_minerales_nivel()
     minerales = {}
     if nivel_actual == 10 then return end
-    -- no generamos minerales aleatorios en la sala del jefe
 
-    local cantidad = mid(3, 2 + nivel_actual, 7)
+    local cantidad = mid(2, 1 + nivel_actual, 5)
     for i = 1, cantidad do
         local m = {
             tipo = "carbon",
@@ -270,6 +250,7 @@ function iniciar_minerales_nivel()
             y = 0
         }
         respawn_mineral(m)
+        obtener_mineral_aleatorio(m)
         add(minerales, m)
     end
 end
@@ -287,17 +268,30 @@ function respawn_mineral(m)
         end
         dist_x = abs(m.x - px)
         dist_y = abs(m.y - py)
+
+        local lejos_de_otros = true
+        for otro in all(minerales) do
+            if otro != m and otro.activo then
+                local ox = abs(m.x - otro.x)
+                local oy = abs(m.y - otro.y)
+                if ox < 20 and oy < 20 then
+                    lejos_de_otros = false
+                end
+            end
+        end
+
         intentos += 1
-    until (posicion_libre(m.x, m.y) and (dist_x > 25 or dist_y > 25)) or intentos > 100
+    until (posicion_libre(m.x, m.y) and (dist_x > 25 or dist_y > 25) and lejos_de_otros) or intentos > 100
     m.activo = true
 end
 
 function obtener_mineral_aleatorio(m)
+    local bonus = nivel_actual * 0.01
     local suerte = rnd(1)
-    if suerte > 0.9 then
+    if suerte > 0.85 - bonus then
         m.tipo = "zafiro"
         m.spr = spr_zafiro
-    elseif suerte > 0.7 then
+    elseif suerte > 0.6 - bonus then
         m.tipo = "oro"
         m.spr = spr_oro
     else
@@ -316,6 +310,9 @@ function posicion_libre(x, y)
             and not solido(x, y + 7)
             and not solido(x + 7, y + 7)
 end
+
+-->8
+-- logica de juego (enemigos, hoguera, recoleccion, fx)
 
 function aplicar_ataque_enemigo(e)
     if timer_inmunidad > 0 then return end
@@ -434,6 +431,51 @@ function actualizar_hoguera()
     end
 end
 
+function chequea_recoleccion()
+    for m in all(minerales) do
+        if m.activo and abs(px - m.x) < 7 and abs(py - m.y) < 7 then
+            if m.tipo == "carbon" then
+                combustible = mid(0, combustible + 25, 100)
+                sfx(5)
+            elseif m.tipo == "oro" then
+                oro += 1
+                sfx(5)
+                crear_texto_flotante(m.x, m.y, m.tipo)
+            elseif m.tipo == "zafiro" then
+                zafiro += 1
+                sfx(5)
+                crear_texto_flotante(m.x, m.y, m.tipo)
+            end
+            obtener_mineral_aleatorio(m)
+            respawn_mineral(m)
+        end
+    end
+end
+
+function crear_texto_flotante(x, y, tipo)
+    local texto = "+1"
+    local color = 7
+    if tipo == "oro" then
+        color = 14
+    elseif tipo == "zafiro" then
+        color = 12
+    end
+    add(textos_flotantes, { x = x, y = y, texto = texto, color = color, vida = 30 })
+end
+
+function actualizar_textos_flotantes()
+    for tf in all(textos_flotantes) do
+        tf.y -= 0.4
+        tf.vida -= 1
+        if tf.vida <= 0 then
+            del(textos_flotantes, tf)
+        end
+    end
+end
+
+-->8
+-- update principal
+
 function _update()
     if timer_intro > 0 then
         timer_intro -= 1
@@ -469,13 +511,9 @@ function _update()
         return
     end
 
-    if btnp(6) then
-        pausado = not pausado
-    end
-    if pausado then return end
-
     if vida <= 0 then
         if not sonido_gameover_sonado then
+            music(-1)
             sfx(11)
             sonido_gameover_sonado = true
         end
@@ -616,6 +654,7 @@ function _update()
             mostrando_nivel_superado = false
             if nivel_pendiente > 10 then
                 escena_actual = 3
+                music(-1)
                 sfx(10)
             else
                 cargar_nivel(nivel_pendiente)
@@ -634,26 +673,8 @@ function _update()
     actualizar_textos_flotantes()
 end
 
-function chequea_recoleccion()
-    for m in all(minerales) do
-        if m.activo and abs(px - m.x) < 7 and abs(py - m.y) < 7 then
-            if m.tipo == "carbon" then
-                combustible = mid(0, combustible + 25, 100)
-                sfx(5)
-            elseif m.tipo == "oro" then
-                oro += 1
-                sfx(5)
-                crear_texto_flotante(m.x, m.y, m.tipo)
-            elseif m.tipo == "zafiro" then
-                zafiro += 1
-                sfx(5)
-                crear_texto_flotante(m.x, m.y, m.tipo)
-            end
-            obtener_mineral_aleatorio(m)
-            respawn_mineral(m)
-        end
-    end
-end
+-->8
+-- dibujo: hud, luz, juego
 
 function dibujar_luz_personaje(scx, scy)
     if radio_luz <= 0 then
@@ -710,36 +731,6 @@ function dibujar_luz_personaje(scx, scy)
     fillp()
 
     circ(scx, scy, radio_final, 6)
-end
-
-function dibujar_titulo()
-    cls(0)
-    local offset_x = cos(t() * 0.5) * 4
-    local pulso_luz = 25 + sin(t() * 2) * 2
-    circfill(63 + offset_x, 61, pulso_luz, 10)
-
-    spr(spr_jugador, 60, 58)
-
-    print("the last light", 37, 50, 1)
-    local col_titulo = 7
-    if rnd(1) > 0.9 then col_titulo = 6 end
-    print("the last light", 36, 49, col_titulo)
-
-    if flr(t() * 2) % 2 == 0 then
-        print("presiona z para comenzar", 16, 90, 6)
-    end
-end
-
-function dibujar_game_over()
-    camera()
-    cls(0)
-    local texto1 = "la oscuridad te ha consumido"
-    local x1 = (128 - #texto1 * 4) / 2
-    print(texto1, x1, 60, 7)
-
-    local texto2 = "pulsa x para reintentar"
-    local x2 = (128 - #texto2 * 4) / 2
-    print(texto2, x2, 70, 6)
 end
 
 function dibujar_hud()
@@ -871,7 +862,7 @@ function dibujar_juego()
         rectfill(18, 48, 110, 88, 0)
         rect(17, 47, 111, 89, 7)
 
-        print("るよdeseas descansar?", 24, 54, 7)
+        print("¿deseas descansar?", 24, 54, 7)
         print("recuperara tu vida", 24, 62, 6)
 
         if opcion_hoguera == 1 then
@@ -884,22 +875,24 @@ function dibujar_juego()
     end
 end
 
-function dibujar_nivel_superado()
-    camera()
-    cls(0)
-    local texto = "nivel " .. (nivel_pendiente - 1) .. " superado!"
-    local ancho = #texto * 4
-    local x = (128 - ancho) / 2
-    print(texto, x, 45, 7)
+-->8
+-- dibujo: pantallas (titulo, instrucciones, fin)
 
-    local resumen = "oro:" .. oro .. "  zafiros:" .. zafiro
-    local x2 = (128 - #resumen * 4) / 2
-    print(resumen, x2, 58, 6)
+function dibujar_titulo()
+    cls(0)
+    local offset_x = cos(t() * 0.5) * 4
+    local pulso_luz = 25 + sin(t() * 2) * 2
+    circfill(63 + offset_x, 61, pulso_luz, 10)
+
+    spr(spr_jugador, 60, 58)
+
+    print("the last light", 37, 50, 1)
+    local col_titulo = 7
+    if rnd(1) > 0.9 then col_titulo = 6 end
+    print("the last light", 36, 49, col_titulo)
 
     if flr(t() * 2) % 2 == 0 then
-        local texto2 = "preparate..."
-        local x2b = (128 - #texto2 * 4) / 2
-        print(texto2, x2b, 75, 6)
+        print("presiona z para comenzar", 16, 90, 6)
     end
 end
 
@@ -918,6 +911,37 @@ function dibujar_instrucciones()
 
     if flr(t() * 2) % 2 == 0 then
         print("z: inciar juego", 38, 115, 10)
+    end
+end
+
+function dibujar_game_over()
+    camera()
+    cls(0)
+    local texto1 = "la oscuridad te ha consumido"
+    local x1 = (128 - #texto1 * 4) / 2
+    print(texto1, x1, 60, 7)
+
+    local texto2 = "pulsa x para reintentar"
+    local x2 = (128 - #texto2 * 4) / 2
+    print(texto2, x2, 70, 6)
+end
+
+function dibujar_nivel_superado()
+    camera()
+    cls(0)
+    local texto = "nivel " .. (nivel_pendiente - 1) .. " superado!"
+    local ancho = #texto * 4
+    local x = (128 - ancho) / 2
+    print(texto, x, 45, 7)
+
+    local resumen = "oro:" .. oro .. "  zafiros:" .. zafiro
+    local x2 = (128 - #resumen * 4) / 2
+    print(resumen, x2, 58, 6)
+
+    if flr(t() * 2) % 2 == 0 then
+        local texto2 = "preparate..."
+        local x2b = (128 - #texto2 * 4) / 2
+        print(texto2, x2b, 75, 6)
     end
 end
 
@@ -1036,8 +1060,6 @@ __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 e1000000000000e00000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 e1000000000000e00000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000
@@ -1089,4 +1111,3 @@ __sfx__
 __music__
 01 00014344
 02 00014344
-
