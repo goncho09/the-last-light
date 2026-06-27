@@ -64,6 +64,8 @@ function _init()
     en_hoguera = false
     opcion_hoguera = 1
     descanso = false
+
+    paused = false
 end
 
 function generar_cueva_aleatoria()
@@ -95,7 +97,7 @@ function generar_cueva_aleatoria()
             wx -= 1
         elseif dir == 1 and wx < 29 then
             wx += 1
-        elseif dir == 2 and wy > 2 then
+        elseif dir == 2 and wy > 4 then
             wy -= 1
         elseif dir == 3 and wy < 29 then
             wy += 1
@@ -208,13 +210,15 @@ function iniciar_enemigos_nivel(n)
         local num_escorpiones = (n >= 6) and 2 or 1
 
         for i = 1, num_serpientes do
-            add(enemigos, spawn_enemigo("serpiente", spr_serpiente, 0.35, 55, 5))
+            add(enemigos, spawn_enemigo("serpiente", spr_serpiente, 0.35, 55, 8))
         end
         for i = 1, num_escorpiones do
-            add(enemigos, spawn_enemigo("escorpion", spr_escorpion, 0.2, 45, 10))
+            add(enemigos, spawn_enemigo("escorpion", spr_escorpion, 0.2, 45, 15))
         end
     elseif n == 10 then
-        -- jefe  en el futuro
+        local jefe = spawn_enemigo("jefe", spr_escorpion, 0.45, 90, 20)
+        jefe.spr = spr_escorpion
+        add(enemigos, jefe)
     end
 end
 
@@ -284,7 +288,7 @@ function aplicar_ataque_enemigo(e)
     if timer_inmunidad > 0 then return end
 
     vida = mid(0, vida - e.danio, 100)
-    timer_inmunidad = 45
+    timer_inmunidad = 30
     sfx(7)
 
     if e.tipo == "escorpion" and not envenenado then
@@ -342,8 +346,10 @@ function actualizar_enemigos()
                     e.vy = (dy / dist) * -e.v_base
                 end
             else
-                e.vx = 0
-                e.vy = 0
+                if rnd(1) < 0.02 then
+                    e.vx = (rnd(2) - 1) * e.v_base * 0.3
+                    e.vy = (rnd(2) - 1) * e.v_base * 0.3
+                end
             end
         end
 
@@ -416,6 +422,11 @@ function _update()
         end
         return
     end
+
+    if btnp(6) then
+        pausado = not pausado
+    end
+    if pausado then return end
 
     if vida <= 0 then
         if btn(5) then _init() end
@@ -570,7 +581,7 @@ function chequea_recoleccion()
     for m in all(minerales) do
         if m.activo and abs(px - m.x) < 7 and abs(py - m.y) < 7 then
             if m.tipo == "carbon" then
-                combustible = mid(0, combustible + 25, 100)
+                combustible = mid(0, combustible + 15, 100)
                 sfx(5)
             elseif m.tipo == "oro" then
                 oro += 1
@@ -613,7 +624,7 @@ function dibujar_luz_personaje(scx, scy)
                 local map_x = flr((x + cam_x) / 8)
                 local map_y = flr((y + cam_y) / 8)
 
-                -- revisa si hay una hoguera en un pequeれねo radio alrededor
+                -- revisa si hay una hoguera en un pequeno radio alrededor
                 for hx = -3, 3 do
                     for hy = -3, 3 do
                         if mget(map_x + hx, map_y + hy) == spr_hoguera then
@@ -661,9 +672,15 @@ function dibujar_titulo()
 end
 
 function dibujar_game_over()
+    camera()
     cls(0)
-    print("la oscuridad te ha consumido", 10, 60, 7)
-    print("pulsa x para reintentar", 20, 70, 6)
+    local texto1 = "la oscuridad te ha consumido"
+    local x1 = (128 - #texto1 * 4) / 2
+    print(texto1, x1, 60, 7)
+
+    local texto2 = "pulsa x para reintentar"
+    local x2 = (128 - #texto2 * 4) / 2
+    print(texto2, x2, 70, 6)
 end
 
 function dibujar_hud()
@@ -702,7 +719,14 @@ function dibujar_juego()
     local cam_x = mid(0, cx - 64, 256 - 128)
     local cam_y = mid(0, cy - 64, 256 - 128)
 
-    camera(cam_x, cam_y)
+    local shake_x, shake_y = 0, 0
+    local vida_critica = vida < 20 and vida > 0
+    if vida_critica then
+        shake_x = rnd(0.6) - 0.3
+        shake_y = rnd(0.6) - 0.3
+    end
+
+    camera(cam_x + shake_x, cam_y + shake_y)
     local scx = cx - cam_x
     local scy = cy - cam_y
 
@@ -761,12 +785,18 @@ function dibujar_juego()
 
     dibujar_hud()
 
-    -- cuadro de dialogo flotante para la hoguera
+    -- borde de alerta cuando la vida es critica, se dibuja al final para que no lo tape nada
+    if vida_critica and flr(t() * 6) % 2 == 0 then
+        fillp(0x5a5a)
+        rect(0, 0, 127, 127, 8)
+        fillp()
+    end
+
     if en_hoguera then
         rectfill(18, 48, 110, 88, 0)
         rect(17, 47, 111, 89, 7)
 
-        print("るよdeseas descansar?", 24, 54, 7)
+        print("¿deseas descansar?", 24, 54, 7)
         print("recuperara tu vida", 24, 62, 6)
 
         if opcion_hoguera == 1 then
@@ -780,6 +810,7 @@ function dibujar_juego()
 end
 
 function dibujar_nivel_superado()
+    camera()
     cls(0)
     local texto = "nivel " .. (nivel_pendiente - 1) .. " superado!"
     local ancho = #texto * 4
@@ -811,6 +842,7 @@ function dibujar_instrucciones()
 end
 
 function dibujar_victoria()
+    camera()
     cls(0)
     local pulso = 20 + sin(t() * 2) * 3
     circfill(64, 55, pulso, 10)
