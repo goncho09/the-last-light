@@ -19,11 +19,16 @@ spr_confusion = 18
 spr_veneno = 19
 spr_hoguera = 20
 
+if ya_vio_instrucciones == nil then
+    ya_vio_instrucciones = false
+end
+
 function _init()
     escena_actual = 0
     oro = 0
     zafiro = 0
     nivel_actual = 1
+    nivel_max = 10
 
     antorcha = { x = 60, y = 60, spr = spr_antorcha, encendida = false }
     item_salida = { x = 90, y = 40, spr = spr_salida, activo = false }
@@ -56,6 +61,7 @@ function _init()
     mostrando_nivel_superado = false
     timer_nivel_superado = 0
     timer_apertura = 0
+    timer_auto_volver = 0
 
     --contador de pasos del jugador
     contador_pasos = 0
@@ -409,13 +415,19 @@ function _update()
 
     if escena_actual == 0 then
         if btnp(4) or btnp(5) then
-            escena_actual = 1
+            if ya_vio_instrucciones then
+                cargar_nivel(1)
+                escena_actual = 2
+            else
+                escena_actual = 1
+            end
         end
         return
     end
 
     if escena_actual == 1 then
         if btnp(4) or btnp(5) then
+            ya_vio_instrucciones = true
             cargar_nivel(1)
             escena_actual = 2
         end
@@ -423,7 +435,8 @@ function _update()
     end
 
     if escena_actual == 3 then
-        if btnp(4) or btnp(5) then
+        timer_auto_volver += 1
+        if btnp(4) or btnp(5) or timer_auto_volver > 300 then
             _init()
         end
         return
@@ -435,7 +448,10 @@ function _update()
     if pausado then return end
 
     if vida <= 0 then
-        if btn(5) then _init() end
+        timer_auto_volver += 1
+        if btn(5) or timer_auto_volver > 300 then
+            _init()
+        end
         return
     end
 
@@ -710,7 +726,7 @@ function dibujar_hud()
     spr(spr_zafiro, 26, 18)
     print(zafiro, 34, 20, 12)
 
-    print("nv" .. nivel_actual, 100, 20, 6)
+    print("nv" .. nivel_actual .. "/" .. nivel_max, 95, 20, 6)
 
     if timer_chispa == 0 and combustible > 5 then
         print("z", 118, 20, 10)
