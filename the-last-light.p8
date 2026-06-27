@@ -410,6 +410,13 @@ function _update()
         return
     end
 
+    if escena_actual == 3 then
+        if btnp(4) or btnp(5) then
+            _init()
+        end
+        return
+    end
+
     if vida <= 0 then
         if btn(5) then _init() end
         return
@@ -541,8 +548,12 @@ function _update()
         timer_nivel_superado -= 1
         if timer_nivel_superado <= 0 then
             mostrando_nivel_superado = false
-            cargar_nivel(nivel_pendiente)
-            timer_apertura = 20
+            if nivel_pendiente > 10 then
+                escena_actual = 3
+            else
+                cargar_nivel(nivel_pendiente)
+                timer_apertura = 20
+            end
         end
         return
     end
@@ -799,12 +810,36 @@ function dibujar_instrucciones()
     end
 end
 
+function dibujar_victoria()
+    cls(0)
+    local pulso = 20 + sin(t() * 2) * 3
+    circfill(64, 55, pulso, 10)
+    spr(spr_jugador, 60, 51)
+
+    local texto1 = "escapaste de la cueva!"
+    local x1 = (128 - #texto1 * 4) / 2
+    print(texto1, x1, 82, 7)
+
+    local texto2 = "the last light"
+    local x2 = (128 - #texto2 * 4) / 2
+    print(texto2, x2, 92, 9)
+
+    if flr(t() * 2) % 2 == 0 then
+        local texto3 = "z: volver al inicio"
+        local x3 = (128 - #texto3 * 4) / 2
+        print(texto3, x3, 105, 6)
+    end
+end
+
 function _draw()
     if escena_actual == 0 then
         dibujar_titulo() return
     end
     if escena_actual == 1 then
         dibujar_instrucciones() return
+    end
+    if escena_actual == 3 then
+        dibujar_victoria() return
     end
     if vida <= 0 then
         dibujar_game_over() return
