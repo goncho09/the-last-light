@@ -18,6 +18,7 @@ spr_salida = 17
 spr_confusion = 18
 spr_veneno = 19
 spr_hoguera = 20
+spr_espada = 12
 
 if ya_vio_instrucciones == nil then
     ya_vio_instrucciones = false
@@ -77,6 +78,19 @@ function _init()
     descanso = false
 
     timer_intro = 60
+
+    -- jefe
+    mostrando_intro_jefe = false
+    timer_intro_jefe = 0
+    ataque_cargado = false
+    timer_armadura = 0
+    vida_jefe = 0
+    vida_jefe_max = 250
+    timer_ataque = 0
+    atacando = false
+    jefe_derrotado = false
+
+    timer_ignorar_hoguera = 0
 end
 
 -->8
@@ -152,8 +166,16 @@ function cargar_nivel(n)
     elseif n == 10 then
         reload(0x2000, 0x2000, 0x1000)
         combustible = 100
-        px = 272
-        py = 32
+        radio_luz = 18
+        radio_base = 18
+        px = 16
+        py = 280
+        mostrando_intro_jefe = true
+        timer_intro_jefe = 150
+        vida_jefe = vida_jefe_max
+        jefe_derrotado = false
+        ataque_cargado = false
+        timer_armadura = 0
     else
         generar_cueva_aleatoria()
         combustible = mid(40, 95 - (n * 3), 100)
@@ -167,11 +189,8 @@ function cargar_nivel(n)
     antorcha.spr = spr_antorcha
 
     if n == 10 then
-        -- posiciones fijas de antorcha y salida en el mapa del jefe
-        antorcha.x = 280
-        antorcha.y = 80
-        item_salida.x = 296
-        item_salida.y = 112
+        pos_hoguera_x = 192
+        pos_hoguera_y = 232
     else
         local dist_minima = 65
         local dist_minima_spawn = (n == 1) and 60 or 110
@@ -230,8 +249,11 @@ function iniciar_enemigos_nivel(n)
             add(enemigos, spawn_enemigo("escorpion", spr_escorpion, 0.2, 45, 15))
         end
     elseif n == 10 then
-        local jefe = spawn_enemigo("jefe", spr_escorpion, 0.45, 90, 20)
-        jefe.spr = spr_escorpion
+        local jefe = {
+            tipo = "jefe", spr = spr_escorpion, x = 336, y = 280, vx = 0, vy = 0,
+            v_base = 0.55, radio_vision = 90, danio = 30,
+            confundido = false, timer_confusion = 0, alertado = true
+        }
         add(enemigos, jefe)
     end
 end
@@ -317,10 +339,15 @@ end
 function aplicar_ataque_enemigo(e)
     if timer_inmunidad > 0 then return end
 
-    vida = mid(0, vida - e.danio, 100)
+    local danio_final = e.danio
+    if timer_armadura > 0 then
+        danio_final = flr(danio_final * 0.5)
+    end
+
+    vida = mid(0, vida - danio_final, 100)
     timer_inmunidad = 30
     timer_flash_dano = 6
-    sfx(7)
+    sfx(8)
 
     if e.tipo == "escorpion" and not envenenado then
         envenenado = true
@@ -371,6 +398,16 @@ function actualizar_enemigos()
             local vis_sq = e.radio_vision * e.radio_vision
 
             if dist_sq < vis_sq then
+                e.alertado = true
+            end
+
+            if e.tipo == "jefe" and e.alertado then
+                local dist = sqrt(dx * dx + dy * dy)
+                if dist > 0 then
+                    e.vx = (dx / dist) * -e.v_base
+                    e.vy = (dy / dist) * -e.v_base
+                end
+            elseif dist_sq < vis_sq then
                 local dist = sqrt(dist_sq)
                 if dist > 0 then
                     e.vx = (dx / dist) * -e.v_base
@@ -385,11 +422,27 @@ function actualizar_enemigos()
         end
 
         local nx, ny = e.x + e.vx, e.y + e.vy
+        local movio_x, movio_y = false, false
+
         if e.vx ~= 0 then
-            if posicion_libre(nx, e.y) then e.x = nx end
+            if posicion_libre(nx, e.y) then
+                e.x = nx
+                movio_x = true
+            end
         end
         if e.vy ~= 0 then
-            if posicion_libre(e.x, ny) then e.y = ny end
+            if posicion_libre(e.x, ny) then
+                e.y = ny
+                movio_y = true
+            end
+        end
+
+        -- si esta atascado contra una pared, intenta desviarse
+        if e.tipo == "jefe" and not movio_x and not movio_y and (e.vx ~= 0 or e.vy ~= 0) then
+            local desvio_x = e.x + (rnd(2) - 1) * e.v_base
+            local desvio_y = e.y + (rnd(2) - 1) * e.v_base
+            if posicion_libre(desvio_x, e.y) then e.x = desvio_x end
+            if posicion_libre(e.x, desvio_y) then e.y = desvio_y end
         end
 
         if timer_inmunidad <= 0 and not e.confundido
@@ -400,7 +453,28 @@ function actualizar_enemigos()
 end
 
 function actualizar_hoguera()
-    if nivel_actual == 10 and not descanso then
+    if timer_ignorar_hoguera > 0 then
+        timer_ignorar_hoguera -= 1
+        en_hoguera = false
+        return
+    end
+
+    if nivel_actual == 10 and not descanso and not jefe_derrotado then
+        local jefe_cerca = false
+        for e in all(enemigos) do
+            if e.tipo == "jefe" then
+                local jdx = e.x - px
+                local jdy = e.y - py
+                if jdx * jdx + jdy * jdy < 70 * 70 then
+                    jefe_cerca = true
+                end
+            end
+        end
+        if jefe_cerca then
+            en_hoguera = false
+            return
+        end
+
         local cx = flr((px + 4) / 8)
         local cy = flr((py + 4) / 8)
 
@@ -408,18 +482,16 @@ function actualizar_hoguera()
                 or mget(cx - 1, cy) == spr_hoguera or mget(cx, cy + 1) == spr_hoguera then
             en_hoguera = true
 
-            -- controlar el menu con las flechas izquierda (si) y derecha (no)
             if btnp(0) then opcion_hoguera = 1 end
             if btnp(1) then opcion_hoguera = 2 end
 
-            -- confirmar con z (boton 4) o x (boton 5)
             if btnp(4) or btnp(5) then
                 if opcion_hoguera == 1 then
                     vida = 100
                     descanso = true
                     sfx(5)
                 else
-                    py += 4 -- empujoncito para salir del rango
+                    timer_ignorar_hoguera = 60
                 end
                 en_hoguera = false
             end
@@ -473,12 +545,71 @@ function actualizar_textos_flotantes()
     end
 end
 
+function actualizar_combate_jefe()
+    if timer_ataque > 0 then timer_ataque -= 1 end
+    if timer_ataque < 18 then atacando = false end
+    if timer_armadura > 0 then timer_armadura -= 1 end
+
+    -- comprar golpe cargado: abajo + z
+    if btn(3) and btnp(4) and zafiro >= 2 and not ataque_cargado then
+        zafiro -= 2
+        ataque_cargado = true
+        sfx(5)
+    end
+
+    -- comprar armadura temporal: arriba + z
+    if btn(2) and btnp(4) and oro >= 5 and timer_armadura == 0 then
+        oro -= 5
+        timer_armadura = 300
+        sfx(5)
+    end
+
+    -- atacar con x
+    if btnp(5) and timer_ataque == 0 and not jefe_derrotado then
+        timer_ataque = 35
+        atacando = true
+        sfx(9)
+
+        for e in all(enemigos) do
+            if e.tipo == "jefe" then
+                local adx = abs((px + 4) - (e.x + 4))
+                local ady = abs((py + 4) - (e.y + 4))
+                if adx < 16 and ady < 16 then
+                    local dist_jefe_luz = sqrt((e.x - px) ^ 2 + (e.y - py) ^ 2)
+                    if dist_jefe_luz < radio_luz then
+                        local danio_ataque = ataque_cargado and 30 or 15
+                        vida_jefe = mid(0, vida_jefe - danio_ataque, vida_jefe_max)
+                        ataque_cargado = false
+                        sfx(7)
+                        if vida_jefe <= 0 then
+                            jefe_derrotado = true
+                            escena_actual = 3
+                            music(-1)
+                            sfx(10)
+                        end
+                    else
+                        sfx(7)
+                    end
+                end
+            end
+        end
+    end
+end
+
 -->8
 -- update principal
 
 function _update()
     if timer_intro > 0 then
         timer_intro -= 1
+        return
+    end
+
+    if mostrando_intro_jefe then
+        timer_intro_jefe -= 1
+        if timer_intro_jefe <= 0 or btnp(4) or btnp(5) then
+            mostrando_intro_jefe = false
+        end
         return
     end
 
@@ -520,6 +651,10 @@ function _update()
         timer_auto_volver += 1
         if btn(5) or timer_auto_volver > 300 then
             sonido_gameover_sonado = false
+            sfx(-1, 0)
+            sfx(-1, 1)
+            sfx(-1, 2)
+            sfx(-1, 3)
             _init()
         end
         return
@@ -584,7 +719,7 @@ function _update()
     if timer_chispa > 0 then timer_chispa -= 1 end
     if chispa_efecto > 0 then chispa_efecto -= 0.5 end
 
-    if btnp(4) and combustible > 5 and timer_chispa == 0 then
+    if btnp(4) and combustible > 5 and timer_chispa == 0 and nivel_actual != 10 then
         chispa_efecto = 15
         combustible -= 20
         timer_chispa = 100
@@ -613,18 +748,23 @@ function _update()
     end
     chequea_recoleccion()
 
+    if nivel_actual == 10 and not transicion_salida and not mostrando_nivel_superado then
+        actualizar_combate_jefe()
+    end
+
     if item_salida.activo
             and abs((px + 4) - (item_salida.x + 4)) < 8
             and abs((py + 4) - (item_salida.y + 4)) < 8
             and not transicion_salida
-            and not mostrando_nivel_superado then
+            and not mostrando_nivel_superado
+            and nivel_actual != 10 then
         transicion_salida = true
         timer_transicion = 40
         nivel_pendiente = nivel_actual + 1
         sfx(6)
     end
 
-    if not transicion_salida then
+    if not transicion_salida and nivel_actual != 10 then
         if combustible > 0 then
             combustible -= 0.04
             radio_luz = radio_base + chispa_efecto
@@ -684,47 +824,56 @@ function dibujar_luz_personaje(scx, scy)
 
     local radio_final = radio_luz
     local d1 = radio_final + 6
-    local d2 = radio_final + 14
-    local d3 = radio_final + 24
+    local d2 = radio_final + 12
+    local d3 = radio_final + 18
+    local d4 = radio_final + 26
 
     local cx = px + 4
     local cy = py + 4
-    local cam_x = mid(0, cx - 64, 256 - 128)
-    local cam_y = mid(0, cy - 64, 256 - 128)
+    local cam_x = mid(0, cx - 64, 512 - 128)
+    local cam_y = mid(0, cy - 64, 512 - 128)
 
-    for x = 0, 128, 4 do
-        for y = 16, 128, 4 do
+    local paso = (nivel_actual == 10) and 2 or 3
+    local tam = paso - 1
+
+    for x = 0, 128, paso do
+        for y = 16, 128, paso do
             local dx = abs(scx - x)
             local dy = abs(scy - y)
             local dist_cuadrado = dx * dx + dy * dy
 
-            -- calculo de iluminacion extra para la hoguera (nivel 10)
-            local luz_hoguera = false
-            if nivel_actual == 10 then
-                local map_x = flr((x + cam_x) / 8)
-                local map_y = flr((y + cam_y) / 8)
+            local luz_extra = false
 
-                -- revisa si hay una hoguera en un pequeno radio alrededor
-                for hx = -3, 3 do
-                    for hy = -3, 3 do
-                        if mget(map_x + hx, map_y + hy) == spr_hoguera then
-                            luz_hoguera = true
-                        end
-                    end
+            if nivel_actual == 10 and pos_hoguera_x then
+                local hdx = (x + cam_x) - pos_hoguera_x
+                local hdy = (y + cam_y) - pos_hoguera_y
+                if hdx * hdx + hdy * hdy < 50 * 50 then
+                    luz_extra = true
                 end
             end
 
-            if luz_hoguera then
-                -- no aplica niebla gruesa cerca de la hoguera
-            elseif dist_cuadrado >= d3 * d3 then
+            if antorcha.encendida and nivel_actual != 10 then
+                local adx = (x + cam_x) - antorcha.x
+                local ady = (y + cam_y) - antorcha.y
+                if adx * adx + ady * ady < 40 * 40 then
+                    luz_extra = true
+                end
+            end
+
+            if luz_extra then
+                -- no aplica niebla cerca de la fuente de luz
+            elseif dist_cuadrado >= d4 * d4 then
                 fillp()
-                rectfill(x, y, x + 3, y + 3, 0)
+                rectfill(x, y, x + tam, y + tam, 0)
+            elseif dist_cuadrado >= d3 * d3 then
+                fillp(0xa5a5)
+                rectfill(x, y, x + tam, y + tam, 0)
             elseif dist_cuadrado >= d2 * d2 then
                 fillp(0x5a5a)
-                rectfill(x, y, x + 3, y + 3, 0)
+                rectfill(x, y, x + tam, y + tam, 0)
             elseif dist_cuadrado >= d1 * d1 then
                 fillp(0x8888)
-                rectfill(x, y, x + 3, y + 3, 0)
+                rectfill(x, y, x + tam, y + tam, 0)
             end
         end
     end
@@ -737,6 +886,32 @@ function dibujar_hud()
     rectfill(0, 0, 127, 28, 1)
     rectfill(0, 0, 127, 27, 0)
     line(0, 27, 127, 27, 5)
+
+    if nivel_actual == 10 then
+        print("vida", 4, 2, 6)
+        rect(4, 9, 60, 13, 5)
+        rectfill(5, 10, 5 + (vida / 1.85), 12, 8)
+
+        print("jefe", 67, 2, 8)
+        rect(67, 9, 123, 13, 5)
+        rectfill(68, 10, 68 + (vida_jefe / (vida_jefe_max / 56)), 12, 8)
+
+        line(63, 1, 63, 16, 5)
+
+        spr(spr_oro, 2, 18)
+        print(oro, 10, 20, 14)
+
+        spr(spr_zafiro, 26, 18)
+        print(zafiro, 34, 20, 12)
+
+        if ataque_cargado then
+            print("carga", 60, 20, 12)
+        end
+        if timer_armadura > 0 then
+            print("armad", 95, 20, 9)
+        end
+        return
+    end
 
     print("combustible", 4, 2, 6)
     rect(4, 9, 60, 13, 5)
@@ -768,10 +943,15 @@ end
 function dibujar_juego()
     cls(0)
 
+    if nivel_actual == 10 then
+        pal(5, 2)
+        pal(6, 8)
+    end
+
     local cx = px + 4
     local cy = py + 4
-    local cam_x = mid(0, cx - 64, 256 - 128)
-    local cam_y = mid(0, cy - 64, 256 - 128)
+    local cam_x = mid(0, cx - 64, 512 - 128)
+    local cam_y = mid(0, cy - 64, 512 - 128)
 
     local shake_x, shake_y = 0, 0
     local vida_critica = vida < 20 and vida > 0
@@ -789,7 +969,7 @@ function dibujar_juego()
     local scx = cx - cam_x
     local scy = cy - cam_y
 
-    map(0, 0, 0, 0, 32, 32)
+    map(0, 0, 0, 0, 64, 64)
 
     for m in all(minerales) do
         if m.activo then
@@ -809,8 +989,10 @@ function dibujar_juego()
         end
     end
 
-    spr(antorcha.spr, antorcha.x, antorcha.y)
-    spr(item_salida.spr, item_salida.x, item_salida.y)
+    if nivel_actual != 10 then
+        spr(antorcha.spr, antorcha.x, antorcha.y)
+        spr(item_salida.spr, item_salida.x, item_salida.y)
+    end
 
     local mostrar_jugador = true
     if timer_inmunidad > 0 and flr(t() * 15) % 2 == 0 then
@@ -821,10 +1003,20 @@ function dibujar_juego()
     if mostrar_jugador then
         palt(0, true)
         spr(spr_jugador, px, py, 1, 1, mirando_izq)
-        if mirando_izq then
-            spr(spr_brazo, px - 5, py + 2, 1, 1, true)
+
+        if nivel_actual == 10 then
+            local offset_ataque = atacando and 4 or 0
+            if mirando_izq then
+                spr(spr_espada, px - 5 - offset_ataque, py + 1, 1, 1, true)
+            else
+                spr(spr_espada, px + 5 + offset_ataque, py + 1, 1, 1, false)
+            end
         else
-            spr(spr_brazo, px + 5, py + 2, 1, 1, false)
+            if mirando_izq then
+                spr(spr_brazo, px - 5, py + 2, 1, 1, true)
+            else
+                spr(spr_brazo, px + 5, py + 2, 1, 1, false)
+            end
         end
         palt()
     end
@@ -849,6 +1041,7 @@ function dibujar_juego()
         end
     end
 
+    pal()
     dibujar_hud()
 
     -- borde de alerta cuando la vida es critica, se dibuja al final para que no lo tape nada
@@ -862,7 +1055,7 @@ function dibujar_juego()
         rectfill(18, 48, 110, 88, 0)
         rect(17, 47, 111, 89, 7)
 
-        print("¿deseas descansar?", 24, 54, 7)
+        print("deseas descansar?", 24, 54, 7)
         print("recuperara tu vida", 24, 62, 6)
 
         if opcion_hoguera == 1 then
@@ -967,6 +1160,39 @@ function dibujar_victoria()
     end
 end
 
+function dibujar_intro_jefe()
+    cls(0)
+    local texto1 = "sentis que algo"
+    local x1 = (128 - #texto1 * 4) / 2
+    print(texto1, x1, 40, 6)
+
+    local texto2 = "te observa desde"
+    local x2 = (128 - #texto2 * 4) / 2
+    print(texto2, x2, 50, 6)
+
+    local texto3 = "la oscuridad..."
+    local x3 = (128 - #texto3 * 4) / 2
+    print(texto3, x3, 60, 6)
+
+    local texto_a = "z/x: atacar"
+    print(texto_a, (128 - #texto_a * 4) / 2, 80, 7)
+
+    local texto_b = "flechas+z: mejoras"
+    print(texto_b, (128 - #texto_b * 4) / 2, 88, 7)
+
+    local texto_c = "abajo+z: zafiro=carga"
+    print(texto_c, (128 - #texto_c * 4) / 2, 96, 12)
+
+    local texto_d = "arriba+z: oro=armadura"
+    print(texto_d, (128 - #texto_d * 4) / 2, 104, 14)
+
+    if flr(t() * 2) % 2 == 0 then
+        local texto4 = "z: continuar"
+        local x4 = (128 - #texto4 * 4) / 2
+        print(texto4, x4, 118, 10)
+    end
+end
+
 function _draw()
     if timer_intro > 0 then
         cls(0)
@@ -993,6 +1219,10 @@ function _draw()
     end
     if mostrando_nivel_superado then
         dibujar_nivel_superado() return
+    end
+    if mostrando_intro_jefe then
+        dibujar_intro_jefe()
+        return
     end
     dibujar_juego()
 end
@@ -1058,23 +1288,29 @@ __gfx__
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 e1000000000000e00000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-e1000000000000e00000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000
+e1000000000000e0e000000000000000000000000000000000000000000000000000000000e0e000000000000000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-e1000000000000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000
+e100000000000000000000e1e10000000000000000e00000000000e00000000000e100000000000000000000e000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-e1000000000000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000
+e1000000000000e100000000000000000000000000000000000000000000000000e100000000000000000000e000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-e1000000000000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000
+e1000000000000e100000000000000000000000000000000000000000000000000e100000000000000000000e000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-e0000000000041e10000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000
+e00000000000e1e100000000000000000000e1e1e10000000000000000000000e1e10000e0e0e0e000000000e000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-e0e0e1e0e0e0e1e1e0e0e0e0e0e1e0e0e0e0e1e0e0e0e0e1e1e1e1e1e0e0e0e0e0e0e0e0e0e00000000000000000000000000000000000000000000000000000
+e0e0e1e0e0e0e1e1e0e0e0e00000000000e10000e1e1e1e1000000000000000000000000e0e0e0e000000000e000000000000000000000000000000000000000
 00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-00000000e10000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000e00000000000e000000000000000000000000000000000000000000000e1e1e1e100e0000000e1e100000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000e00000000000000000000000000000000000000000e0e1e100000000e0000000e1e1e0000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000e0e0e0000000000000000000000000000000e000e0e0000000000000e0e00000e1e1e0000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000e0e0e0e0e0e0e1e1e1e1e1e1e1e0e0e0e0000000000000000000e0e0e0e1e000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000e1e1e1e10000000000000000000000000000000000000000000000000000000000000000000000000000
 __gff__
 0000000000000000000000000000010100010000000000000000000000000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -1095,19 +1331,36 @@ __map__
 0e0e0e0e0e0e0e0e0e0e0e0e000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 0000000e0e0e0e0e0e0e0e0e0e0e0e0e0e000000000000000e0e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00000000000000000000000000000e0e0e0e0e0e0e0e0e0e0e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000000000000000000000000000e0e0e000e0e0e0e0e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000000000e000e0e0e0e0e0e0e0e0e0e00000e0e0000000e0e0e0e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000000000000000000000e0e0e0e00000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000000000000000e0e0e00000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000e1e1e1e0e0e0e000000000000001e00000000000000000000001e0000000000000e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0000000000000000000e1e0000000000000000000000001e1e1e1e1e000000000000001e1e1e000000000e0e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000e0e0e00000000000000000000000000000000000000000000000000001e000000001e0e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000e000000000000000000000000000000000000000000000000000000001e0000001e0e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000000000e000000001e1e1e0000000e0e000000000000000e0e00000000000000001e00001e0e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000000000000000e0e0000001e1e0000000000000e0e00000000000e0e000000000000000000000000001e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000e0e0e0e0e0e0e000000001e1e000000000000000e00001400000e00000000000000000000000000001e00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0e0e000e0000000000000000001e000000000000000e00000000000e0000000000001e1e0000000000001e0e000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+0e0e00000000000000000000001e000000000000000e00000000000e00000000001e0000000000000000001e0e0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
-010e00200c0231951517516195150c0231751519516175150c0231951517516195150c0231751519516175150c023135151f0111f5110c0231751519516175150c0231e7111e7102a7100c023175151951617515
+000e00200c0231951517516195150c0231751519516175150c0231951517516195150c0231751519516175150c023135151f0111f5110c0231751519516175150c0231e7111e7102a7100c023175151951617515
 000e002000130070200c51000130070200a51000130070200c51000130070200a5200a5200a5120a5120a51200130070200c51000130070200a51000130070200c510001300b5200a5200a5200a5120a5120a512
 00020000335602c540265200000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000100000653004520005101270010700107000560000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000800003c0303f0303f03000000000001d0001d0001d0001f0002000021000250002b000160002600018000190001a0001c0001e0002000022000240002600028000290002c0000000000000000000000000000
-000800000c0100e0100e0100f0101002011020130201402015030160301703019030190401a0401b0401c0401d0501e0501f05020060220602306024060250702607028070290702a0002b0002c0002e0002f000
+000800000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 000400001f1701614013130101200c110020100311027100191001b100000001b10000000191001e100191001e100191000000000000000000000000000000000000000000000000000000000000000000000000
-0004000024670206601a65016640106300c6200261000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+000800000e3400b33008330082000a2001120013700107000a6000b60009600086000760005600046000460001300013000030000000000000000000000000000000000000000000000000000000000000000000
 001000000d0500d0500e0500e0500e0500f0500f05010050180501b0501c0501d0501d0501b0501c0501c0502705025050270502705026050270502605026050310502e0502f0502e0502d0502e0502e0502d050
 001000003506034040330403404033040320403004030040250402104022040210302203020030200301f03017030160201602015020140201202011020140200d0200a0200a020090100c0100b0100c01009010
 __music__
 01 00014344
 02 00014344
+
