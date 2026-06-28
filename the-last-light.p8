@@ -36,8 +36,8 @@ function _init()
 
     px = 24
     py = 24
-    velocidad_base = 1.1
-    velocidad = 1.1
+    velocidad_base = 0.7
+    velocidad = 0.7
     mirando_izq = false
     vida = 100
 
@@ -143,12 +143,20 @@ function generar_cueva_aleatoria()
     end
 end
 
+function tiene_espacio_alrededor(x, y, margen)
+    return posicion_libre(x - margen, y)
+            and posicion_libre(x + margen, y)
+            and posicion_libre(x, y - margen)
+            and posicion_libre(x, y + margen)
+end
+
 function posicion_valida_objeto(x, y, dist_min_entre_si, dist_min_spawn)
     local dx1 = x - item_salida.x
     local dy1 = y - item_salida.y
     local dx2 = x - px
     local dy2 = y - py
     return posicion_libre(x, y)
+            and tiene_espacio_alrededor(x, y, 8)
             and dx1 * dx1 + dy1 * dy1 > dist_min_entre_si ^ 2
             and dx2 * dx2 + dy2 * dy2 > dist_min_spawn ^ 2
 end
@@ -163,6 +171,8 @@ function cargar_nivel(n)
         combustible = 100
         px = 24
         py = 32
+        mostrando_tutorial_tag = true
+        timer_tutorial_tag = 90
     elseif n == 10 then
         reload(0x2000, 0x2000, 0x1000)
         combustible = 100
@@ -201,7 +211,7 @@ function cargar_nivel(n)
                 antorcha.x = 60 + rnd(50)
                 antorcha.y = 35 + rnd(70)
                 item_salida.x = 16 + rnd(35)
-                item_salida.y = 24 + rnd(70)
+                item_salida.y = 35 + rnd(70)
             else
                 antorcha.x = 16 + rnd(200)
                 antorcha.y = 35 + rnd(200)
@@ -210,7 +220,8 @@ function cargar_nivel(n)
             end
             intentos += 1
         until (posicion_valida_objeto(antorcha.x, antorcha.y, dist_minima, dist_minima_spawn)
-                    and posicion_libre(item_salida.x, item_salida.y)) or intentos > 500
+                    and posicion_libre(item_salida.x, item_salida.y)
+                    and tiene_espacio_alrededor(item_salida.x, item_salida.y, 8)) or intentos > 500
     end
 
     item_salida.activo = false
@@ -227,8 +238,18 @@ function spawn_enemigo(tipo, spr, v_base, radio_vision, danio)
         ey = 35 + rnd(200)
         local dx = ex - px
         local dy = ey - py
+
+        local lejos_de_otros = true
+        for otro in all(enemigos) do
+            local ox = abs(ex - otro.x)
+            local oy = abs(ey - otro.y)
+            if ox < 30 and oy < 30 then
+                lejos_de_otros = false
+            end
+        end
+
         intentos += 1
-    until (posicion_libre(ex, ey) and dx * dx + dy * dy > 70 * 70) or intentos > 200
+    until (posicion_libre(ex, ey) and dx * dx + dy * dy > 70 * 70 and lejos_de_otros) or intentos > 200
     return {
         tipo = tipo, spr = spr, x = ex, y = ey, vx = 0, vy = 0,
         v_base = v_base, radio_vision = radio_vision, danio = danio,
@@ -262,7 +283,7 @@ function iniciar_minerales_nivel()
     minerales = {}
     if nivel_actual == 10 then return end
 
-    local cantidad = mid(2, 1 + nivel_actual, 5)
+    local cantidad = mid(2, 1 + nivel_actual, 4)
     for i = 1, cantidad do
         local m = {
             tipo = "carbon",
@@ -310,15 +331,12 @@ end
 function obtener_mineral_aleatorio(m)
     local bonus = nivel_actual * 0.01
     local suerte = rnd(1)
-    if suerte > 0.85 - bonus then
+    if suerte > 0.8 - bonus then
         m.tipo = "zafiro"
-        m.spr = spr_zafiro
-    elseif suerte > 0.6 - bonus then
+    elseif suerte > 0.45 - bonus then
         m.tipo = "oro"
-        m.spr = spr_oro
     else
         m.tipo = "carbon"
-        m.spr = spr_carbon
     end
 end
 
@@ -507,7 +525,7 @@ function chequea_recoleccion()
     for m in all(minerales) do
         if m.activo and abs(px - m.x) < 7 and abs(py - m.y) < 7 then
             if m.tipo == "carbon" then
-                combustible = mid(0, combustible + 25, 100)
+                combustible = mid(0, combustible + 18, 100)
                 sfx(5)
             elseif m.tipo == "oro" then
                 oro += 1
@@ -683,37 +701,39 @@ function _update()
         end
     end
 
-    local pos_ant_x = px
-    local pos_ant_y = py
+    if not transicion_salida then
+        local pos_ant_x = px
+        local pos_ant_y = py
 
-    local dx, dy = 0, 0
-    if btn(0) then
-        dx -= velocidad mirando_izq = true
-    end
-    if btn(1) then
-        dx += velocidad mirando_izq = false
-    end
-    if btn(2) then dy -= velocidad end
-    if btn(3) then dy += velocidad end
-
-    if dx ~= 0 then
-        local nx = px + dx
-        if posicion_libre(nx, py) then px = nx end
-    end
-    if dy ~= 0 then
-        local ny = py + dy
-        if posicion_libre(px, ny) and ny >= 30 then
-            py = ny
+        local dx, dy = 0, 0
+        if btn(0) then
+            dx -= velocidad mirando_izq = true
         end
-    end
-
-    if px ~= pos_ant_x or py ~= pos_ant_y then
-        contador_pasos += 1
-        if contador_pasos % 14 == 0 then
-            sfx(4)
+        if btn(1) then
+            dx += velocidad mirando_izq = false
         end
-    else
-        contador_pasos = 0
+        if btn(2) then dy -= velocidad end
+        if btn(3) then dy += velocidad end
+
+        if dx ~= 0 then
+            local nx = px + dx
+            if posicion_libre(nx, py) then px = nx end
+        end
+        if dy ~= 0 then
+            local ny = py + dy
+            if posicion_libre(px, ny) and ny >= 30 then
+                py = ny
+            end
+        end
+
+        if px ~= pos_ant_x or py ~= pos_ant_y then
+            contador_pasos += 1
+            if contador_pasos % 14 == 0 then
+                sfx(4)
+            end
+        else
+            contador_pasos = 0
+        end
     end
 
     if timer_chispa > 0 then timer_chispa -= 1 end
@@ -725,27 +745,29 @@ function _update()
         timer_chispa = 100
         sfx(8)
 
-        local radio_cegado = radio_base + 25
+        local radio_cegado = radio_base + 5
         for e in all(enemigos) do
             local edx = e.x - px
             local edy = e.y - py
             if edx * edx + edy * edy < radio_cegado * radio_cegado then
                 e.confundido = true
-                e.timer_confusion = 180
-            end
-        end
-
-        if not antorcha.encendida then
-            local adx = abs((px + 4) - (antorcha.x + 4))
-            local ady = abs((py + 4) - (antorcha.y + 4))
-            if adx < 12 and ady < 12 then
-                antorcha.encendida = true
-                antorcha.spr = spr_antorcha_e
-                item_salida.activo = true
-                item_salida.spr = spr_salida_a
+                e.timer_confusion = 60
             end
         end
     end
+
+    if btnp(5) and not antorcha.encendida and nivel_actual != 10 then
+        local adx = abs((px + 4) - (antorcha.x + 4))
+        local ady = abs((py + 4) - (antorcha.y + 4))
+        if adx < 12 and ady < 12 then
+            antorcha.encendida = true
+            antorcha.spr = spr_antorcha_e
+            item_salida.activo = true
+            item_salida.spr = spr_salida_a
+            sfx(8)
+        end
+    end
+
     chequea_recoleccion()
 
     if nivel_actual == 10 and not transicion_salida and not mostrando_nivel_superado then
@@ -771,7 +793,7 @@ function _update()
         else
             combustible = 0
             radio_luz = mid(0, radio_luz - 0.4, 100)
-            if radio_luz <= 0 then vida -= 0.5 end
+            if radio_luz <= 0 then vida -= 3 end
         end
     end
 
@@ -889,11 +911,11 @@ function dibujar_hud()
 
     if nivel_actual == 10 then
         print("vida", 4, 2, 6)
-        rect(4, 9, 60, 13, 5)
+        rect(4, 9, 60, 13, 7)
         rectfill(5, 10, 5 + (vida / 1.85), 12, 8)
 
         print("jefe", 67, 2, 8)
-        rect(67, 9, 123, 13, 5)
+        rect(67, 9, 123, 13, 7)
         rectfill(68, 10, 68 + (vida_jefe / (vida_jefe_max / 56)), 12, 8)
 
         line(63, 1, 63, 16, 5)
@@ -914,12 +936,12 @@ function dibujar_hud()
     end
 
     print("combustible", 4, 2, 6)
-    rect(4, 9, 60, 13, 5)
+    rect(4, 9, 60, 13, 7)
     rectfill(5, 10, 5 + (combustible / 1.85), 12, 9)
 
     print("vida", 67, 2, 6)
-    rect(67, 9, 123, 13, 5)
-    rectfill(68, 10, 68 + (vida / 1.85), 12, 8)
+    rect(67, 9, 123, 13, 7)
+    rectfill(68, 10, 68 + (vida / 1.85), 12, 10)
 
     line(63, 1, 63, 16, 5)
 
@@ -928,6 +950,10 @@ function dibujar_hud()
 
     spr(spr_zafiro, 26, 18)
     print(zafiro, 34, 20, 12)
+
+    if nivel_actual == 1 then
+        print("tutorial", 51, 20, 10)
+    end
 
     print("nv" .. nivel_actual .. "/" .. nivel_max, 90, 20, 6)
 
@@ -1037,17 +1063,23 @@ function dibujar_juego()
         local adx = abs((px + 4) - (antorcha.x + 4))
         local ady = abs((py + 4) - (antorcha.y + 4))
         if adx < 14 and ady < 14 then
-            print("z: encender antorcha", 24, 100, 10)
+            print("x: encender antorcha", 24, 100, 10)
         end
     end
 
     pal()
     dibujar_hud()
 
+    if radio_luz <= 0 and vida > 0 then
+        local tam = 10 + vida * 0.35
+        circfill(64, 75, tam, 9)
+        circfill(64, 75, tam - 6, 10)
+    end
+
     -- borde de alerta cuando la vida es critica, se dibuja al final para que no lo tape nada
     if vida_critica and flr(t() * 6) % 2 == 0 then
         fillp(0x5a5a)
-        rect(0, 0, 127, 127, 8)
+        rect(0, 0, 127, 127, 10)
         fillp()
     end
 
@@ -1094,13 +1126,14 @@ function dibujar_instrucciones()
     print("como jugar", 44, 10, 7)
 
     print("flechas: moverse", 8, 26, 6)
-    print("z: chispa", 8, 36, 6)
-    print("obten carbon para sobrevivir", 8, 46, 6)
-    print("oro y zafiros = monedas", 8, 56, 6)
-    print("cuidado con los enemigos", 8, 66, 6)
-    print("para ganar:", 8, 76, 6)
-    print("-enciende la antorcha", 12, 86, 6)
-    print("-busca la salida del nivel", 12, 96, 6)
+    print("z: chispa (con espera)", 8, 36, 6)
+    print("x: encender antorcha", 8, 46, 6)
+    print("obten carbon para sobrevivir", 8, 56, 6)
+    print("oro y zafiros = monedas", 8, 66, 6)
+    print("cuidado con los enemigos", 8, 76, 6)
+    print("para ganar:", 8, 86, 6)
+    print("-enciende la antorcha", 12, 96, 6)
+    print("-busca la salida del nivel", 12, 106, 6)
 
     if flr(t() * 2) % 2 == 0 then
         print("z: inciar juego", 38, 115, 10)
