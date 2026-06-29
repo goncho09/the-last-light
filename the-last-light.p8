@@ -63,6 +63,7 @@ function _init()
     timer_nivel_superado = 0
     timer_apertura = 0
     timer_auto_volver = 0
+    timer_en_puerta = 0
     --contador de pasos del jugador
     contador_pasos = 0
     --hoguera
@@ -293,7 +294,7 @@ function iniciar_minerales_nivel()
     minerales = {}
     if nivel_actual == 5 then return end
 
-    local cantidad = mid(2, 1 + nivel_actual, 5)
+    local cantidad = mid(2, 1 + nivel_actual, 4)
     for i = 1, cantidad do
         local m = {
             tipo = "carbon",
@@ -314,7 +315,7 @@ function respawn_mineral(m)
     repeat
         if nivel_actual == 1 then
             m.x = 24 + rnd(60)
-            m.y = 24 + rnd(60)
+            m.y = 32 + rnd(60)
         else
             m.x = 16 + rnd(160)
             m.y = 35 + rnd(160)
@@ -545,7 +546,7 @@ function crear_texto_flotante(x, y, tipo)
     local texto = "+1"
     local color = 7
     if tipo == "oro" then
-        color = 14
+        color = 7
     elseif tipo == "zafiro" then
         color = 12
     end
@@ -559,6 +560,7 @@ function actualizar_textos_flotantes()
         if tf.vida <= 0 then del(textos_flotantes, tf) end
     end
 end
+
 -->8
 function _update()
     if timer_intro > 0 then
@@ -577,6 +579,7 @@ function _update()
         end
         return
     end
+
     if escena_actual == 1 then
         if btnp(4) or btnp(5) then
             ya_vio_instrucciones = true
@@ -586,6 +589,7 @@ function _update()
         end
         return
     end
+
     if escena_actual == 3 then
         timer_auto_volver += 1
         if btnp(4) or btnp(5) or timer_auto_volver > 300 then
@@ -593,6 +597,7 @@ function _update()
         end
         return
     end
+
     if vida <= 0 then
         if not sonido_gameover_sonado then
             music(-1)
@@ -721,7 +726,7 @@ function _update()
                     end
                 else
                     e.confundido = true
-                    e.timer_confusion = 180
+                    e.timer_confusion = 90
                 end
             end
         end
@@ -741,15 +746,21 @@ function _update()
 
     -- 6. transicion de salida
     if item_salida.activo
-            and abs((px + 4) - (item_salida.x + 4)) < 12
-            and abs((py + 4) - (item_salida.y + 4)) < 12
+            and abs((px + 4) - (item_salida.x + 4)) < 6
+            and abs((py + 4) - (item_salida.y + 4)) < 6
             and not transicion_salida
             and not mostrando_nivel_superado then
-        transicion_salida = true
-        timer_transicion = 40
-        nivel_pendiente = nivel_actual + 1
-        sfx(6)
+        timer_en_puerta += 1
+        if timer_en_puerta > 15 then
+            transicion_salida = true
+            timer_transicion = 40
+            nivel_pendiente = nivel_actual + 1
+            sfx(6)
+        end
+    else
+        timer_en_puerta = 0
     end
+
     if not transicion_salida then
         if combustible > 0 then
             local gasto = 0.04
@@ -941,7 +952,7 @@ function dibujar_luz_personaje(scx, scy)
             local my_point = y + cam_y_for_fog
 
             local luz_antorcha = false
-            if antorcha.encendida then
+            if antorcha.encendida and not transicion_salida then
                 local t_dx = abs(mx_point - (antorcha.x + 4))
                 local t_dy = abs(my_point - (antorcha.y + 4))
                 local t_dist_sq = t_dx * t_dx + t_dy * t_dy
@@ -949,7 +960,7 @@ function dibujar_luz_personaje(scx, scy)
             end
 
             local luz_hoguera = false
-            if nivel_actual == 5 then
+            if nivel_actual == 5 and not transicion_salida then
                 local h_dx = abs(mx_point - 24)
                 local h_dy = abs(my_point - 288)
                 if h_dx < 35 and h_dy < 35 then
@@ -978,17 +989,17 @@ function dibujar_hud()
     line(0, 27, 127, 27, 5)
 
     print("combustible", 4, 2, 6)
-    rect(4, 9, 60, 13, 5)
+    rect(4, 9, 60, 13, 7)
     rectfill(5, 10, 5 + (combustible / (combustible_max or 100)) * 54, 12, 9)
 
     print("vida", 67, 2, 6)
-    rect(67, 9, 123, 13, 5)
-    rectfill(68, 10, 68 + (vida / (vida_max or 100)) * 54, 12, 8)
+    rect(67, 9, 123, 13, 7)
+    rectfill(68, 10, 68 + (vida / (vida_max or 100)) * 54, 12, 10)
 
     line(63, 1, 63, 16, 5)
 
     spr(spr_oro, 2, 19)
-    print(oro, 10, 20, 14)
+    print(oro, 10, 20, 7)
 
     spr(spr_zafiro, 26, 18)
     print(zafiro, 34, 20, 12)
@@ -1024,7 +1035,7 @@ function dibujar_juego()
     local vida_critica = vida < 20 and vida > 0
 
     if vida_critica then
-        shake_x = rnd(0.6) - 0.3 shake_y = rnd(0.6) - 0.3
+        shake_x = rnd(0.6) - 0.3 shake_y = rnd(0.6) - 0.2
     elseif jefe_shake > 0 then
         shake_x = rnd(jefe_shake) - jefe_shake / 2
         shake_y = rnd(jefe_shake) - jefe_shake / 2
@@ -1143,7 +1154,7 @@ function dibujar_juego()
     if not antorcha.encendida and nivel_actual != 5 then
         local adx = abs((px + 4) - (antorcha.x + 4))
         local ady = abs((py + 4) - (antorcha.y + 4))
-        if adx < 24 and ady < 24 then
+        if adx < 14 and ady < 14 then
             print("x: encender antorcha", 24, 100, 10)
         end
     end
@@ -1151,7 +1162,7 @@ function dibujar_juego()
     if not jefe_en_intro then dibujar_hud() end
 
     if vida_critica and flr(t() * 6) % 2 == 0 then
-        fillp(0x5a5a) rect(0, 0, 127, 127, 8) fillp()
+        rect(0, 0, 127, 127, 10)
     end
 
     -- menu de la hoguera corregido (solo descanso)
@@ -1374,7 +1385,7 @@ function iniciar_jefe()
 end
 
 function actualizar_jefe(e)
-    if jefe_shake > 0 then jefe_shake -= 0.2 end
+    if jefe_shake > 0 then jefe_shake -= 0.015 end
     if e.timer_molestado > 0 then e.timer_molestado -= 1 end
 
     -- 1. estado: durmiendo
