@@ -38,8 +38,8 @@ function _init()
     item_salida = { x = 90, y = 40, spr = spr_salida, activo = false }
     px = 24
     py = 24
-    velocidad_base = 1.1
-    velocidad = 1.1
+    velocidad_base = 0.9
+    velocidad = 0.9
     mirando_izq = false
     vida = 100
     sonido_gameover_sonado = false
@@ -55,6 +55,8 @@ function _init()
     enemigos = {}
     textos_flotantes = {}
     timer_flash_dano = 0
+    causa_muerte = "oscuridad"
+
     -- transicion
     timer_transicion = 0
     transicion_salida = false
@@ -64,8 +66,10 @@ function _init()
     timer_apertura = 0
     timer_auto_volver = 0
     timer_en_puerta = 0
+
     --contador de pasos del jugador
     contador_pasos = 0
+
     --hoguera
     en_hoguera = false
     opcion_hoguera = 1
@@ -194,7 +198,6 @@ function cargar_nivel(n)
         duende_y = 288
     else
         generar_cueva_aleatoria()
-        combustible = mid(40, 95 - (n * 3), combustible_max)
         px = 24
         py = 35
     end
@@ -204,8 +207,8 @@ function cargar_nivel(n)
     antorcha.spr = spr_antorcha
 
     if n == 1 then
-        antorcha.x = 80
-        antorcha.y = 48
+        antorcha.x = 24
+        antorcha.y = 80
         item_salida.x = 16
         item_salida.y = 32
     elseif n == 5 then
@@ -248,6 +251,10 @@ function cargar_nivel(n)
     item_salida.activo = false
     item_salida.spr = spr_salida
 
+    if combustible < 20 then
+        combustible = 20
+    end
+
     iniciar_minerales_nivel()
     iniciar_enemigos_nivel(n)
 end
@@ -269,7 +276,7 @@ function spawn_enemigo(tipo, spr, v_base, radio_vision, danio)
     return {
         tipo = tipo, spr = spr, x = ex, y = ey, vx = 0, vy = 0,
         v_base = v_base, radio_vision = radio_vision, danio = danio,
-        confundido = false, timer_confusion = 0
+        confundido = false, timer_confusion = 0, panico = false, timer_panico = 0
     }
 end
 
@@ -294,7 +301,7 @@ function iniciar_minerales_nivel()
     minerales = {}
     if nivel_actual == 5 then return end
 
-    local cantidad = mid(2, 1 + nivel_actual, 4)
+    local cantidad = mid(3, 1 + nivel_actual, 5)
     for i = 1, cantidad do
         local m = {
             tipo = "carbon",
@@ -312,9 +319,12 @@ end
 function respawn_mineral(m)
     local intentos = 0
     local dist_x, dist_y = 0, 0
+    local lejos_de_otros = true
+    local lejos_antorcha = true
+
     repeat
         if nivel_actual == 1 then
-            m.x = 24 + rnd(60)
+            m.x = 32 + rnd(60)
             m.y = 32 + rnd(60)
         else
             m.x = 16 + rnd(160)
@@ -323,7 +333,7 @@ function respawn_mineral(m)
         dist_x = abs(m.x - px)
         dist_y = abs(m.y - py)
 
-        local lejos_de_otros = true
+        lejos_de_otros = true
         for otro in all(minerales) do
             if otro != m and otro.activo then
                 local ox = abs(m.x - otro.x)
@@ -334,18 +344,20 @@ function respawn_mineral(m)
             end
         end
 
+        lejos_antorcha = abs(m.x - antorcha.x) > 16 or abs(m.y - antorcha.y) > 16
+
         intentos += 1
-    until (posicion_libre(m.x, m.y) and (dist_x > 15 or dist_y > 15) and lejos_de_otros) or intentos > 100
+    until (posicion_libre(m.x, m.y) and (dist_x > 15 or dist_y > 15) and lejos_de_otros and lejos_antorcha) or intentos > 100
     m.activo = true
 end
 
 function obtener_mineral_aleatorio(m)
     local bonus = nivel_actual * 0.01
     local suerte = rnd(1)
-    if suerte > 0.85 - bonus then
+    if suerte > 0.75 - bonus then
         m.tipo = "zafiro"
         m.spr = spr_zafiro
-    elseif suerte > 0.6 - bonus then
+    elseif suerte > 0.4 - bonus then
         m.tipo = "oro"
         m.spr = spr_oro
     else
@@ -378,10 +390,14 @@ function aplicar_ataque_enemigo(e)
     sfx(7)
     -- sfx de danio asignado al 7
 
+    if vida <= 0 then
+        causa_muerte = "enemigo"
+    end
+
     if e.tipo == "escorpion" and not envenenado then
         envenenado = true
         timer_envenenamiento = 180
-        velocidad = velocidad_base * 0.7
+        velocidad = velocidad_base * 0.85
         for i = 1, 4 do
             crear_burbuja_veneno()
         end
@@ -429,18 +445,29 @@ function actualizar_enemigos()
             local dy_torch = e.y - antorcha.y
             local dist_sq_torch = dx_torch * dx_torch + dy_torch * dy_torch
             local scare_radius_sq = 36 * 36
+            local stop_panic_sq = 70 * 70
 
-            if antorcha.encendida and dist_sq_torch < scare_radius_sq then
+            if e.panico then
+                e.timer_panico -= 1
+                if e.timer_panico <= 0 or dist_sq_torch > stop_panic_sq then
+                    e.panico = false
+                end
+            elseif antorcha.encendida and dist_sq_torch < scare_radius_sq then
+                e.panico = true
+                e.timer_panico = 60
+            end
+
+            if e.panico then
                 local dist_torch = sqrt(dist_sq_torch)
                 if dist_torch > 0 then
                     local unit_x = dx_torch / dist_torch
                     local unit_y = dy_torch / dist_torch
-                    local panic_speed = e.v_base * 3.0
+                    local panic_speed = e.v_base * 1.5
                     e.vx = unit_x * panic_speed
                     e.vy = unit_y * panic_speed
                 else
-                    e.vx = (rnd(2) - 1) * e.v_base * 3.0
-                    e.vy = (rnd(2) - 1) * e.v_base * 3.0
+                    e.vx = (rnd(2) - 1) * e.v_base * 1.5
+                    e.vy = (rnd(2) - 1) * e.v_base * 1.5
                 end
                 if e.tipo == "escorpion" then
                     e.spr = spr_escorpion
@@ -501,7 +528,7 @@ function actualizar_hoguera()
             if btnp(0) or btnp(2) then opcion_hoguera = 1 end
             if btnp(1) or btnp(3) then opcion_hoguera = 2 end
 
-            if btnp(4) or btnp(5) then
+            if btnp(5) then
                 if opcion_hoguera == 1 then
                     vida = vida_max
                     descanso = true
@@ -647,7 +674,7 @@ function _update()
     local pos_ant_y = py
     local dx, dy = 0, 0
 
-    if not jefe_en_intro and not transicion_salida then
+    if not jefe_en_intro and not transicion_salida and timer_apertura <= 0 then
         if btn(0) then
             dx -= velocidad mirando_izq = true
         end
@@ -771,6 +798,7 @@ function _update()
             combustible = 0
             radio_luz = mid(0, radio_luz - 0.4, 100)
             if radio_luz <= 0 then vida -= 3 end
+            if vida <= 0 then causa_muerte = "oscuridad" end
         end
     end
     if transicion_salida then
@@ -848,63 +876,6 @@ function actualizar_logica_duende()
     end
 end
 
--- === menれあ del duende (corregido - sin bucle infinito) ===
-function manejar_menu_duende()
-    if preguntando_duende and not en_tienda_duende then
-        -- menれむ si / no
-        if btnp(2) or btnp(3) then
-            opcion_pregunta_duende = 3 - opcion_pregunta_duende
-        end
-        if btnp(4) or btnp(5) then
-            if opcion_pregunta_duende == 1 then
-                -- si
-                preguntando_duende = false
-                en_tienda_duende = true
-                en_tienda = true
-                opcion_tienda = 1
-                sfx(5)
-            else
-                -- no
-                cerrar_tienda_duende()
-            end
-        end
-        return
-    end
-
-    if en_tienda or en_tienda_duende then
-        -- navegaciれはn tienda
-        if btnp(2) then opcion_tienda = max(1, opcion_tienda - 1) end
-        if btnp(3) then opcion_tienda = min(4, opcion_tienda + 1) end
-
-        if btnp(4) then
-            -- z = comprar
-            if opcion_tienda == 1 and not tiene_farola and oro >= 8 then
-                tiene_farola = true
-                oro -= 8
-                sfx(2)
-            elseif opcion_tienda == 2 and zafiro >= 7 then
-                vida_max += 25
-                vida = vida_max
-                zafiro -= 7
-                sfx(2)
-            elseif opcion_tienda == 3 and oro >= 4 then
-                combustible_max += 60
-                combustible = combustible_max
-                oro -= 4
-                sfx(2)
-            elseif opcion_tienda == 4 then
-                -- salir
-                cerrar_tienda_duende()
-            end
-        end
-
-        if btnp(5) then
-            -- x = cancelar
-            cerrar_tienda_duende()
-        end
-    end
-end
-
 -- funciれはn auxiliar para cerrar la tienda y evitar bucle
 function cerrar_tienda_duende()
     en_tienda = false
@@ -913,6 +884,55 @@ function cerrar_tienda_duende()
     px -= 22
     -- empuja al jugador hacia la izquierda
     sfx(1)
+end
+
+function manejar_menu_duende()
+    if preguntando_duende and not en_tienda_duende then
+        if btnp(2) or btnp(3) then
+            opcion_pregunta_duende = 3 - opcion_pregunta_duende
+        end
+        if btnp(5) then
+            if opcion_pregunta_duende == 1 then
+                preguntando_duende = false
+                en_tienda_duende = true
+                en_tienda = true
+                opcion_tienda = 1
+                sfx(5)
+            else
+                cerrar_tienda_duende()
+            end
+        end
+        return
+    end
+
+    if en_tienda or en_tienda_duende then
+        if btnp(2) then opcion_tienda = max(1, opcion_tienda - 1) end
+        if btnp(3) then opcion_tienda = min(4, opcion_tienda + 1) end
+
+        if btnp(4) then
+            if opcion_tienda == 1 and not tiene_farola and oro >= 4 then
+                tiene_farola = true
+                oro -= 4
+                sfx(2)
+            elseif opcion_tienda == 2 and zafiro >= 3 then
+                vida_max += 25
+                vida = vida_max
+                zafiro -= 3
+                sfx(2)
+            elseif opcion_tienda == 3 and oro >= 2 then
+                combustible_max += 60
+                combustible = combustible_max
+                oro -= 2
+                sfx(2)
+            elseif opcion_tienda == 4 then
+                cerrar_tienda_duende()
+            end
+        end
+
+        if btnp(5) then
+            cerrar_tienda_duende()
+        end
+    end
 end
 -->8
 -- dibujo: hud, luz, juego
@@ -927,8 +947,9 @@ function dibujar_luz_personaje(scx, scy)
     if tiene_farola then radio_final = radio_luz + 10 end
 
     local d1 = radio_final + 6
-    local d2 = radio_final + 14
-    local d3 = radio_final + 24
+    local d2 = radio_final + 12
+    local d3 = radio_final + 18
+    local d4 = radio_final + 26
 
     local cx_for_fog = px + 4
     local cy_for_fog = py + 4
@@ -969,9 +990,10 @@ function dibujar_luz_personaje(scx, scy)
             end
 
             if luz_antorcha or luz_hoguera then
-                -- iluminado
-            elseif dist_cuadrado >= d3 * d3 then
+            elseif dist_cuadrado >= d4 * d4 then
                 fillp() rectfill(x, y, x + 3, y + 3, 0)
+            elseif dist_cuadrado >= d3 * d3 then
+                fillp(0xa5a5) rectfill(x, y, x + 3, y + 3, 0)
             elseif dist_cuadrado >= d2 * d2 then
                 fillp(0x5a5a) rectfill(x, y, x + 3, y + 3, 0)
             elseif dist_cuadrado >= d1 * d1 then
@@ -1041,8 +1063,6 @@ function dibujar_juego()
         shake_y = rnd(jefe_shake) - jefe_shake / 2
     end
 
-    if timer_flash_dano > 0 then rect(0, 0, 127, 127, 8) end
-
     camera(cam_x + shake_x, cam_y + shake_y)
     local scx = cx - cam_x
     local scy = cy - cam_y
@@ -1060,7 +1080,7 @@ function dibujar_juego()
         print(tf.texto, tf.x, tf.y, tf.color)
     end
 
-    if nivel_actual != 10 then
+    if nivel_actual != 5 and not transicion_salida then
         if antorcha.encendida then
             spr(spr_antorcha_e, antorcha.x, antorcha.y)
         else
@@ -1091,18 +1111,18 @@ function dibujar_juego()
         spr(p.spr, p.x, p.y)
     end
 
-    if nivel_actual != 10 then
+    if nivel_actual != 5 and not transicion_salida then
         if item_salida.activo then
             spr(spr_salida_a, item_salida.x, item_salida.y)
         else
             spr(spr_salida, item_salida.x, item_salida.y)
         end
-    elseif item_salida.activo then
+    elseif item_salida.activo and not transicion_salida then
         spr(item_salida.spr, item_salida.x, item_salida.y)
     end
 
     -- =======================================================
-    -- dibujo del duende (solo en el nivel 10)
+    -- dibujo del duende (solo en el nivel 5)
     -- =======================================================
     if nivel_actual == 5 and duende_x != nil and duende_y != nil then
         palt(0, true)
@@ -1175,6 +1195,7 @@ function dibujar_juego()
         else
             print("  si", 38, 76, 5) print("> no", 74, 76, 8)
         end
+        print("x: confirmar", 36, 86, 6)
     end
 
     -- mensaje de confirmation del duende
@@ -1188,6 +1209,7 @@ function dibujar_juego()
         else
             print("  si", 34, 72, 5) print("> no", 78, 72, 8)
         end
+        print("x: confirmar", 36, 82, 6)
     end
 
     -- menu de la tienda del duende
@@ -1214,6 +1236,7 @@ function dibujar_juego()
         print("vida max: " .. (vida_max or 100), 14, 104, 8)
     end
 end
+
 -->8
 -- dibujo: pantallas (titulo, instrucciones, fin)
 
@@ -1237,26 +1260,32 @@ end
 
 function dibujar_instrucciones()
     cls(0)
-    print("como jugar", 44, 10, 7)
+    local titulo = "como jugar"
+    print(titulo, (128 - #titulo * 4) / 2, 8, 7)
 
-    print("flechas: moverse", 8, 26, 6)
-    print("z: chispa", 8, 36, 6)
-    print("obten carbon para sobrevivir", 8, 46, 6)
-    print("oro y zafiros = monedas", 8, 56, 6)
-    print("cuidado con los enemigos", 8, 66, 6)
-    print("para ganar:", 8, 76, 6)
-    print("-enciende la antorcha", 12, 86, 6)
-    print("-busca la salida del nivel", 12, 96, 6)
+    print("flechas: moverse", 8, 24, 6)
+    print("z: chispa  x: antorcha", 8, 34, 6)
+    print("recolecta minerales", 8, 44, 6)
+    print("cuidado con los enemigos", 8, 54, 6)
+    print("para ganar:", 8, 66, 6)
+    print("-enciende la antorcha", 12, 76, 6)
+    print("-busca la salida", 12, 86, 6)
 
     if flr(t() * 2) % 2 == 0 then
-        print("z: iniciar juego", 38, 115, 10)
+        local texto_z = "z: iniciar juego"
+        print(texto_z, (128 - #texto_z * 4) / 2, 112, 10)
     end
 end
 
 function dibujar_game_over()
     camera()
     cls(0)
-    local texto1 = "la oscuridad te ha consumido"
+    local texto1 = ""
+    if causa_muerte == "enemigo" then
+        texto1 = "caiste ante las sombras"
+    else
+        texto1 = "la oscuridad te ha consumido"
+    end
     local x1 = (128 - #texto1 * 4) / 2
     print(texto1, x1, 60, 7)
 
