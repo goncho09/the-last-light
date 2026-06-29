@@ -5,7 +5,7 @@ __lua__
 -- ==========================================
 -- apartado de pruebas / debug
 modo_prueba_jefe = true
-toycotizado = true
+toycotizado = false
 -- ==========================================
 -- constantes
 spr_jugador = 1
@@ -23,6 +23,7 @@ spr_confusion = 18
 spr_veneno = 19
 spr_hoguera = 20
 spr_farola = 7
+
 -- inicializar variables globales de control antes de _init
 if ya_vio_instrucciones == nil then
     ya_vio_instrucciones = false
@@ -32,7 +33,7 @@ function _init()
     -- 0: titulo, 1: instrucciones, 2: gameplay, 3: creditos/final
     escena_actual = 0
     nivel_actual = 1
-    nivel_max = 10
+    nivel_max = 5
     antorcha = { x = 60, y = 60, spr = spr_antorcha, encendida = false }
     item_salida = { x = 90, y = 40, spr = spr_salida, activo = false }
     px = 24
@@ -68,7 +69,7 @@ function _init()
     en_hoguera = false
     opcion_hoguera = 1
     descanso = false
-               
+
     -- jefe final
     jefe_vida = 0
     jefe_vida_max = 0
@@ -80,7 +81,7 @@ function _init()
     veces_molestado = 0
     jefe_en_intro = false
     jefe_shake = 0
-   
+
     -- logica de toy cotizado
     if toycotizado == true then
         oro = 9999
@@ -89,18 +90,18 @@ function _init()
         oro = 0
         zafiro = 0
     end
-               
+
     vida_max = 100
     combustible_max = 100
     tiene_farola = false
-    
+
     -- === variables del duende ===
     en_tienda = false
     en_tienda_duende = false
     preguntando_duende = false
     opcion_tienda = 1
     opcion_pregunta_duende = 1
-   
+
     -- duende (nivel 10)
     if modo_prueba_jefe == true then
         duende_x = 112
@@ -109,7 +110,7 @@ function _init()
         duende_x = nil
         duende_y = nil
     end
-   
+
     timer_intro = 60
     spr_jugador_actual = spr_jugador
 end
@@ -181,14 +182,14 @@ function cargar_nivel(n)
         music(0)
         reload(0x2000, 0x2000, 0x1000)
         combustible = combustible_max
-        px = 24  
-        py = 24  
-    elseif n == 10 then
+        px = 24
+        py = 30
+    elseif n == 5 then
         reload(0x2000, 0x2000, 0x1000)
         combustible = combustible_max
         px = 16
         py = 280
-        duende_x = 100  
+        duende_x = 100
         duende_y = 288
     else
         generar_cueva_aleatoria()
@@ -202,14 +203,14 @@ function cargar_nivel(n)
     antorcha.spr = spr_antorcha
 
     if n == 1 then
-        antorcha.x = 80     
-        antorcha.y = 48     
-        item_salida.x = 16  
-        item_salida.y = 24  
-    elseif n == 10 then
-        antorcha.x = -100 
+        antorcha.x = 80
+        antorcha.y = 48
+        item_salida.x = 16
+        item_salida.y = 32
+    elseif n == 5 then
+        antorcha.x = -100
         antorcha.y = -100
-        item_salida.x = -100 
+        item_salida.x = -100
         item_salida.y = -100
     else
         -- ヌうそ correcciれ⧗n: separaciれはn estricta entre objetos en niveles aleatorios
@@ -222,23 +223,24 @@ function cargar_nivel(n)
             antorcha.y = 35 + rnd(160)
             item_salida.x = 16 + rnd(160)
             item_salida.y = 35 + rnd(160)
-            
-            -- distancia entre la antorcha y la puerta
+
             local dx_entre_si = antorcha.x - item_salida.x
             local dy_entre_si = antorcha.y - item_salida.y
             local dist_entre_si_sq = dx_entre_si * dx_entre_si + dy_entre_si * dy_entre_si
-            
-            -- distancia de la antorcha al jugador
+
             local dx_p_ant = antorcha.x - px
             local dy_p_ant = antorcha.y - py
             local dist_p_ant_sq = dx_p_ant * dx_p_ant + dy_p_ant * dy_p_ant
 
             intentos += 1
-            
-            local valida = posicion_libre(antorcha.x, antorcha.y) 
-                           and posicion_libre(item_salida.x, item_salida.y)
-                           and dist_entre_si_sq > (dist_minima * dist_minima)
-                           and dist_p_ant_sq > (dist_minima_spawn * dist_minima_spawn)
+
+            local valida = posicion_libre(antorcha.x, antorcha.y)
+                    and posicion_libre(item_salida.x, item_salida.y)
+                    and dist_entre_si_sq > (dist_minima * dist_minima)
+                    and dist_p_ant_sq > (dist_minima_spawn * dist_minima_spawn)
+            -- distancia entre la antorcha y la puerta
+
+            -- distancia de la antorcha al jugador
         until valida or intentos > 600
     end
 
@@ -282,14 +284,14 @@ function iniciar_enemigos_nivel(n)
         for i = 1, num_escorpiones do
             add(enemigos, spawn_enemigo("escorpion", spr_escorpion, 0.2, 45, 15))
         end
-    elseif n == 10 then
+    elseif n == 5 then
         iniciar_jefe()
     end
 end
 
 function iniciar_minerales_nivel()
     minerales = {}
-    if nivel_actual == 10 then return end
+    if nivel_actual == 5 then return end
 
     local cantidad = mid(2, 1 + nivel_actual, 5)
     for i = 1, cantidad do
@@ -352,11 +354,9 @@ function obtener_mineral_aleatorio(m)
 end
 
 function solido(x, y)
-    if nivel_actual < 10 then
-        if x < 0 or x > 255 or y < 0 or y > 255 then return true end
-    else
-        if x < 0 or x > 255 or y < 0 or y > 511 then return true end
-    end
+    local max_x = (nivel_actual == 5) and 511 or 255
+    local max_y = (nivel_actual == 5) and 511 or 255
+    if x < 0 or x > max_x or y < 0 or y > max_y then return true end
     return fget(mget(flr(x / 8), flr(y / 8)), 0)
 end
 
@@ -374,9 +374,10 @@ function aplicar_ataque_enemigo(e)
     vida = mid(0, vida - e.danio, vida_max)
     timer_inmunidad = 30
     timer_flash_dano = 6
-    sfx(7) -- sfx de danio asignado al 7
-    
-    if e.tipo == "escorpion" then
+    sfx(7)
+    -- sfx de danio asignado al 7
+
+    if e.tipo == "escorpion" and not envenenado then
         envenenado = true
         timer_envenenamiento = 180
         velocidad = velocidad_base * 0.7
@@ -425,7 +426,7 @@ function actualizar_enemigos()
         else
             local dx_torch = e.x - antorcha.x
             local dy_torch = e.y - antorcha.y
-            local dist_sq_torch = dx_torch*dx_torch + dy_torch*dy_torch
+            local dist_sq_torch = dx_torch * dx_torch + dy_torch * dy_torch
             local scare_radius_sq = 36 * 36
 
             if antorcha.encendida and dist_sq_torch < scare_radius_sq then
@@ -436,11 +437,14 @@ function actualizar_enemigos()
                     local panic_speed = e.v_base * 3.0
                     e.vx = unit_x * panic_speed
                     e.vy = unit_y * panic_speed
-                    e.spr = 19
                 else
                     e.vx = (rnd(2) - 1) * e.v_base * 3.0
                     e.vy = (rnd(2) - 1) * e.v_base * 3.0
-                    e.spr = 19
+                end
+                if e.tipo == "escorpion" then
+                    e.spr = spr_escorpion
+                elseif e.tipo == "serpiente" then
+                    e.spr = spr_serpiente
                 end
             else
                 if e.tipo == "escorpion" then
@@ -448,22 +452,22 @@ function actualizar_enemigos()
                 elseif e.tipo == "serpiente" then
                     e.spr = spr_serpiente
                 end
-                
+
                 local dx = px - e.x
                 local dy = py - e.y
-                local dist_sq = dx*dx + dy*dy
+                local dist_sq = dx * dx + dy * dy
                 local vis_sq = e.radio_vision * e.radio_vision
-                
+
                 if dist_sq < vis_sq then
                     local dist = sqrt(dist_sq)
                     if dist > 0 then
-                        e.vx = (dx/dist) * e.v_base
-                        e.vy = (dy/dist) * e.v_base
+                        e.vx = (dx / dist) * e.v_base
+                        e.vy = (dy / dist) * e.v_base
                     end
                 else
                     if rnd(1) < 0.02 then
-                        e.vx = (rnd(2)-1) * e.v_base * 0.3
-                        e.vy = (rnd(2)-1) * e.v_base * 0.3
+                        e.vx = (rnd(2) - 1) * e.v_base * 0.3
+                        e.vy = (rnd(2) - 1) * e.v_base * 0.3
                     end
                 end
             end
@@ -475,7 +479,7 @@ function actualizar_enemigos()
             if e.vy ~= 0 then
                 if posicion_libre(e.x, ny) then e.y = ny end
             end
-            
+
             if timer_inmunidad <= 0 and not e.confundido
                     and abs(px - e.x) < 8 and abs(py - e.y) < 8 then
                 aplicar_ataque_enemigo(e)
@@ -485,17 +489,17 @@ function actualizar_enemigos()
 end
 
 function actualizar_hoguera()
-    if nivel_actual == 10 and not descanso then
+    if nivel_actual == 5 and not descanso then
         local cx = flr((px + 4) / 8)
         local cy = flr((py + 4) / 8)
-        
-        if mget(cx, cy) == spr_hoguera or mget(cx+1, cy) == spr_hoguera
-                or mget(cx-1, cy) == spr_hoguera or mget(cx, cy+1) == spr_hoguera then
+
+        if mget(cx, cy) == spr_hoguera or mget(cx + 1, cy) == spr_hoguera
+                or mget(cx - 1, cy) == spr_hoguera or mget(cx, cy + 1) == spr_hoguera then
             en_hoguera = true
-            
+
             if btnp(0) or btnp(2) then opcion_hoguera = 1 end
             if btnp(1) or btnp(3) then opcion_hoguera = 2 end
-            
+
             if btnp(4) or btnp(5) then
                 if opcion_hoguera == 1 then
                     vida = vida_max
@@ -504,7 +508,7 @@ function actualizar_hoguera()
                 else
                     -- soluciれ⧗n: empujar a la izquierda (x) en lugar de abajo (y)
                     -- para alejarlo de la hoguera sin enterrarlo en el suelo
-                    px -= 8 
+                    px -= 8
                 end
                 en_hoguera = false
             end
@@ -540,9 +544,12 @@ end
 function crear_texto_flotante(x, y, tipo)
     local texto = "+1"
     local color = 7
-    if tipo == "oro" then color = 14
-    elseif tipo == "zafiro" then color = 12 end
-    add(textos_flotantes, {x=x, y=y, texto=texto, color=color, vida=30})
+    if tipo == "oro" then
+        color = 14
+    elseif tipo == "zafiro" then
+        color = 12
+    end
+    add(textos_flotantes, { x = x, y = y, texto = texto, color = color, vida = 30 })
 end
 
 function actualizar_textos_flotantes()
@@ -561,7 +568,7 @@ function _update()
     if escena_actual == 0 then
         if btnp(4) or btnp(5) then
             if ya_vio_instrucciones then
-                local nivel_inicio = modo_prueba_jefe and 10 or 1
+                local nivel_inicio = 1
                 cargar_nivel(nivel_inicio)
                 escena_actual = 2
             else
@@ -573,7 +580,7 @@ function _update()
     if escena_actual == 1 then
         if btnp(4) or btnp(5) then
             ya_vio_instrucciones = true
-            local nivel_inicio = modo_prueba_jefe and 10 or 1
+            local nivel_inicio = 1
             cargar_nivel(nivel_inicio)
             escena_actual = 2
         end
@@ -607,15 +614,7 @@ function _update()
     -- 2. logica del duende verde
     actualizar_logica_duende()
     if en_tienda_duende or preguntando_duende then
-        if actualizar_tienda_duende != nil then
-            actualizar_tienda_duende()
-        elseif actualizar_tienda != nil then
-            actualizar_tienda()
-        elseif actualizar_duende != nil then
-            actualizar_duende()
-        else
-            manejar_menu_duende()
-        end
+        manejar_menu_duende()
         return -- detiene movimiento del jugador
     end
 
@@ -625,7 +624,7 @@ function _update()
     if envenenado then
         timer_envenenamiento -= 1
         if timer_envenenamiento % 60 == 0 then
-            vida = mid(0, vida - 1, vida_max)
+            vida = mid(0, vida - 3, vida_max)
         end
         if flr(t() * 4) % 2 == 0 then
             crear_burbuja_veneno()
@@ -642,20 +641,27 @@ function _update()
     local pos_ant_x = px
     local pos_ant_y = py
     local dx, dy = 0, 0
-  
-    if not jefe_en_intro then
-        if btn(0) then dx -= velocidad mirando_izq = true end
-        if btn(1) then dx += velocidad mirando_izq = false end
+
+    if not jefe_en_intro and not transicion_salida then
+        if btn(0) then
+            dx -= velocidad mirando_izq = true
+        end
+        if btn(1) then
+            dx += velocidad mirando_izq = false
+        end
         if btn(2) then dy -= velocidad end
         if btn(3) then dy += velocidad end
     end
+
     if dx ~= 0 then
         local nx = px + dx
         if posicion_libre(nx, py) then px = nx end
     end
     if dy ~= 0 then
         local ny = py + dy
-        if posicion_libre(px, ny) then py = ny end
+        if posicion_libre(px, ny) and ny >= 30 then
+            py = ny
+        end
     end
     if px ~= pos_ant_x or py ~= pos_ant_y then
         contador_pasos += 1
@@ -675,25 +681,14 @@ function _update()
         combustible -= 20
         timer_chispa = 135
         sfx(8)
-      
-        local dist_torch_x = abs(px - antorcha.x)
-        local dist_torch_y = abs(py - antorcha.y)
-        if dist_torch_x < 24 and dist_torch_y < 24 then
-            antorcha.encendida = true
-            sfx(5)
-            if nivel_actual < 10 then
-                item_salida.activo = true
-                item_salida.spr = spr_salida_a
-            end
-        end
-      
+
         local radio_cegado = radio_base + 25
         for e in all(enemigos) do
             local edx = e.x - px
             local edy = e.y - py
-            if edx*edx + edy*edy < radio_cegado*radio_cegado then
+            if edx * edx + edy * edy < radio_cegado * radio_cegado then
                 if e.tipo == "jefe" then
-                    if not jefe_muerto and not jefe_en_intro then
+                    if not jefe_muerto and not jefe_en_intro and e.timer_molestado <= 0 then
                         e.vx = 0
                         e.vy = 0
                         veces_molestado += 1
@@ -702,26 +697,26 @@ function _update()
                             e.timer_estado = 30
                             e.lx = px + 4
                             e.ly = py + 4
-                            add(textos_flotantes, {x=e.x, y=e.y-4, texto="!carga!", color=9, vida=20})
+                            add(textos_flotantes, { x = e.x, y = e.y - 4, texto = "!carga!", color = 9, vida = 20 })
                         elseif veces_molestado == 2 then
                             e.estado = "ataque_pinzas"
                             e.timer_estado = 60
                             local pdx = (px + 4) - (e.x + 4)
                             local pdy = (py + 4) - (e.y + 4)
-                            local pdist = sqrt(pdx*pdx + pdy*pdy)
+                            local pdist = sqrt(pdx * pdx + pdy * pdy)
                             if pdist > 0 then
                                 e.p_dir_x = pdx / pdist
                                 e.p_dir_y = pdy / pdist
                             else
                                 e.p_dir_x = 0 e.p_dir_y = 1
                             end
-                            add(textos_flotantes, {x=e.x, y=e.y-4, texto="!pinzas!", color=10, vida=30})
+                            add(textos_flotantes, { x = e.x, y = e.y - 4, texto = "!pinzas!", color = 10, vida = 30 })
                         elseif veces_molestado == 3 then
                             e.estado = "ataque_slam"
                             e.timer_estado = 20
                             if jefe_terremoto_molesto then jefe_terremoto_molesto() end
                             veces_molestado = 0
-                            add(textos_flotantes, {x=e.x, y=e.y-4, texto="!furia!", color=8, vida=30})
+                            add(textos_flotantes, { x = e.x, y = e.y - 4, texto = "!furia!", color = 8, vida = 30 })
                         end
                     end
                 else
@@ -732,10 +727,22 @@ function _update()
         end
     end
 
+    -- encender antorcha con x
+    if btnp(5) and not antorcha.encendida and nivel_actual != 5 then
+        local dist_torch_x = abs(px - antorcha.x)
+        local dist_torch_y = abs(py - antorcha.y)
+        if dist_torch_x < 24 and dist_torch_y < 24 then
+            antorcha.encendida = true
+            sfx(5)
+            item_salida.activo = true
+            item_salida.spr = spr_salida_a
+        end
+    end
+
     -- 6. transicion de salida
     if item_salida.activo
-            and abs((px+4) - (item_salida.x+4)) < 12
-            and abs((py+4) - (item_salida.y+4)) < 12
+            and abs((px + 4) - (item_salida.x + 4)) < 12
+            and abs((py + 4) - (item_salida.y + 4)) < 12
             and not transicion_salida
             and not mostrando_nivel_superado then
         transicion_salida = true
@@ -752,7 +759,7 @@ function _update()
         else
             combustible = 0
             radio_luz = mid(0, radio_luz - 0.4, 100)
-            if radio_luz <= 0 then vida -= 0.5 end
+            if radio_luz <= 0 then vida -= 3 end
         end
     end
     if transicion_salida then
@@ -790,7 +797,7 @@ function _update()
     -- 7. resto del mundo
     actualizar_enemigos()
     chequea_recoleccion()
-    if nivel_actual == 10 then
+    if nivel_actual == 5 then
         if actualizar_proyectiles_jefe then actualizar_proyectiles_jefe() end
         if actualizar_piedras then actualizar_piedras() end
         if jefe_muerto and jefe_timer_muerte > 0 then
@@ -819,7 +826,7 @@ function actualizar_logica_duende()
     if duende_x != nil and duende_y != nil then
         local dist_x = abs(px - duende_x)
         local dist_y = abs(py - duende_y)
-      
+
         if dist_x < 16 and dist_y < 16 then
             preguntando_duende = true
         else
@@ -838,13 +845,15 @@ function manejar_menu_duende()
             opcion_pregunta_duende = 3 - opcion_pregunta_duende
         end
         if btnp(4) or btnp(5) then
-            if opcion_pregunta_duende == 1 then -- si
+            if opcion_pregunta_duende == 1 then
+                -- si
                 preguntando_duende = false
                 en_tienda_duende = true
                 en_tienda = true
                 opcion_tienda = 1
                 sfx(5)
-            else -- no
+            else
+                -- no
                 cerrar_tienda_duende()
             end
         end
@@ -856,7 +865,8 @@ function manejar_menu_duende()
         if btnp(2) then opcion_tienda = max(1, opcion_tienda - 1) end
         if btnp(3) then opcion_tienda = min(4, opcion_tienda + 1) end
 
-        if btnp(4) then -- z = comprar
+        if btnp(4) then
+            -- z = comprar
             if opcion_tienda == 1 and not tiene_farola and oro >= 8 then
                 tiene_farola = true
                 oro -= 8
@@ -871,12 +881,14 @@ function manejar_menu_duende()
                 combustible = combustible_max
                 oro -= 4
                 sfx(2)
-            elseif opcion_tienda == 4 then -- salir
+            elseif opcion_tienda == 4 then
+                -- salir
                 cerrar_tienda_duende()
             end
         end
 
-        if btnp(5) then -- x = cancelar
+        if btnp(5) then
+            -- x = cancelar
             cerrar_tienda_duende()
         end
     end
@@ -887,7 +899,8 @@ function cerrar_tienda_duende()
     en_tienda = false
     en_tienda_duende = false
     preguntando_duende = false
-    px -= 22   -- empuja al jugador hacia la izquierda
+    px -= 22
+    -- empuja al jugador hacia la izquierda
     sfx(1)
 end
 -->8
@@ -909,10 +922,10 @@ function dibujar_luz_personaje(scx, scy)
     local cx_for_fog = px + 4
     local cy_for_fog = py + 4
     local cam_x_for_fog = mid(0, cx_for_fog - 64, 256 - 128)
-    
-    local max_cam_y_fog = (nivel_actual == 10) and (512 - 128) or (256 - 128)
+
+    local max_cam_y_fog = (nivel_actual == 5) and (512 - 128) or (256 - 128)
     local cam_y_for_fog = mid(0, cy_for_fog - 64, max_cam_y_fog)
-    
+
     if jefe_en_intro and escorpios then
         cam_x_for_fog = mid(0, escorpios.x - 64, 256 - 128)
         cam_y_for_fog = mid(0, escorpios.y - 64, 512 - 128)
@@ -932,14 +945,14 @@ function dibujar_luz_personaje(scx, scy)
                 local t_dx = abs(mx_point - (antorcha.x + 4))
                 local t_dy = abs(my_point - (antorcha.y + 4))
                 local t_dist_sq = t_dx * t_dx + t_dy * t_dy
-                if t_dist_sq < 32 * 32 then luz_antorcha = true end
+                if t_dist_sq < 45 * 45 then luz_antorcha = true end
             end
 
             local luz_hoguera = false
-            if nivel_actual == 10 then
+            if nivel_actual == 5 then
                 local h_dx = abs(mx_point - 24)
                 local h_dy = abs(my_point - 288)
-                if h_dx < 24 and h_dy < 24 then
+                if h_dx < 35 and h_dy < 35 then
                     luz_hoguera = true
                 end
             end
@@ -980,6 +993,10 @@ function dibujar_hud()
     spr(spr_zafiro, 26, 18)
     print(zafiro, 34, 20, 12)
 
+    if nivel_actual == 1 then
+        print("tutorial", 49, 20, 10)
+    end
+
     print("nv" .. nivel_actual .. "/" .. nivel_max, 90, 20, 6)
 
     if timer_chispa == 0 and combustible > 5 then
@@ -995,7 +1012,7 @@ function dibujar_juego()
     local cx = px + 4
     local cy = py + 4
     local cam_x = mid(0, cx - 64, 256 - 128)
-    local max_cam_y = (nivel_actual == 10) and (512 - 128) or (256 - 128)
+    local max_cam_y = (nivel_actual == 5) and (512 - 128) or (256 - 128)
     local cam_y = mid(0, cy - 64, max_cam_y)
 
     if jefe_en_intro and escorpios then
@@ -1019,7 +1036,7 @@ function dibujar_juego()
     local scx = cx - cam_x
     local scy = cy - cam_y
 
-    if nivel_actual == 10 then map(0, 0, 0, 0, 32, 64) else map(0, 0, 0, 0, 32, 32) end
+    if nivel_actual == 5 then map(0, 0, 0, 0, 32, 64) else map(0, 0, 0, 0, 32, 32) end
 
     for m in all(minerales) do
         if m.activo then
@@ -1028,11 +1045,16 @@ function dibujar_juego()
         end
     end
 
-    for tf in all(textos_flotantes) do print(tf.texto, tf.x, tf.y, tf.color) end
+    for tf in all(textos_flotantes) do
+        print(tf.texto, tf.x, tf.y, tf.color)
+    end
 
     if nivel_actual != 10 then
-        if antorcha.encendida then spr(spr_antorcha_e, antorcha.x, antorcha.y)
-        else spr(spr_antorcha, antorcha.x, antorcha.y) end
+        if antorcha.encendida then
+            spr(spr_antorcha_e, antorcha.x, antorcha.y)
+        else
+            spr(spr_antorcha, antorcha.x, antorcha.y)
+        end
     end
 
     for e in all(enemigos) do
@@ -1041,9 +1063,11 @@ function dibujar_juego()
                 dibujar_escorpios(e)
             else
                 if jefe_timer_muerte > 45 then
-                    dibujar_escorpios_offset(e, rnd(4)-2, rnd(4)-2)
+                    dibujar_escorpios_offset(e, rnd(4) - 2, rnd(4) - 2)
                 elseif jefe_timer_muerte > 0 then
-                    for i = 1, 5 do pset(e.x + rnd(24), e.y + rnd(8), 8 + flr(rnd(4))) end
+                    for i = 1, 5 do
+                        pset(e.x + rnd(24), e.y + rnd(8), 8 + flr(rnd(4)))
+                    end
                 end
             end
         else
@@ -1052,11 +1076,16 @@ function dibujar_juego()
         if e.confundido then spr(spr_confusion, e.x, e.y - 6) end
     end
 
-    for p in all(piedras_caendo) do spr(p.spr, p.x, p.y) end
+    for p in all(piedras_caendo) do
+        spr(p.spr, p.x, p.y)
+    end
 
     if nivel_actual != 10 then
-        if item_salida.activo then spr(spr_salida_a, item_salida.x, item_salida.y)
-        else spr(spr_salida, item_salida.x, item_salida.y) end
+        if item_salida.activo then
+            spr(spr_salida_a, item_salida.x, item_salida.y)
+        else
+            spr(spr_salida, item_salida.x, item_salida.y)
+        end
     elseif item_salida.activo then
         spr(item_salida.spr, item_salida.x, item_salida.y)
     end
@@ -1064,7 +1093,7 @@ function dibujar_juego()
     -- =======================================================
     -- dibujo del duende (solo en el nivel 10)
     -- =======================================================
-    if nivel_actual == 10 and duende_x != nil and duende_y != nil then
+    if nivel_actual == 5 and duende_x != nil and duende_y != nil then
         palt(0, true)
         spr(22, duende_x, duende_y)
         palt()
@@ -1079,27 +1108,46 @@ function dibujar_juego()
         palt(0, true)
         spr(spr_jugador_actual, px, py, 1, 1, mirando_izq)
         if mirando_izq then
-            if tiene_farola then spr(spr_farola, px - 5, py + 2, 1, 1, true)
-            else spr(spr_brazo, px - 5, py + 2, 1, 1, true) end
+            if tiene_farola then
+                spr(spr_farola, px - 5, py + 2, 1, 1, true)
+            else
+                spr(spr_brazo, px - 5, py + 2, 1, 1, true)
+            end
         else
-            if tiene_farola then spr(spr_farola, px + 5, py + 2, 1, 1, false)
-            else spr(spr_brazo, px + 5, py + 2, 1, 1, false) end
+            if tiene_farola then
+                spr(spr_farola, px + 5, py + 2, 1, 1, false)
+            else
+                spr(spr_brazo, px + 5, py + 2, 1, 1, false)
+            end
         end
         palt()
     end
 
     if envenenado then
         palt(0, true)
-        for b in all(burbujas_veneno) do sspr(b.spr % 16 * 8, flr(b.spr / 16) * 8, 8, 8, b.x, b.y, 4, 4) end
+        for b in all(burbujas_veneno) do
+            sspr(b.spr % 16 * 8, flr(b.spr / 16) * 8, 8, 8, b.x, b.y, 4, 4)
+        end
         palt()
     end
 
     camera()
 
     if not jefe_en_intro then dibujar_luz_personaje(scx, scy) end
-    if jefe_en_intro then rectfill(0, 0, 127, 14, 0) rectfill(0, 114, 127, 127, 0) end
+    if jefe_en_intro then
+        rectfill(0, 0, 127, 14, 0) rectfill(0, 114, 127, 127, 0)
+    end
 
     dibujar_barra_jefe()
+
+    if not antorcha.encendida and nivel_actual != 5 then
+        local adx = abs((px + 4) - (antorcha.x + 4))
+        local ady = abs((py + 4) - (antorcha.y + 4))
+        if adx < 24 and ady < 24 then
+            print("x: encender antorcha", 24, 100, 10)
+        end
+    end
+
     if not jefe_en_intro then dibujar_hud() end
 
     if vida_critica and flr(t() * 6) % 2 == 0 then
@@ -1136,7 +1184,7 @@ function dibujar_juego()
         rectfill(10, 24, 118, 114, 0)
         rect(9, 23, 119, 115, 11)
         print("--- duende mercader ---", 18, 29, 12)
-        
+
         local col1 = (opcion_tienda == 1) and 11 or 6
         local col2 = (opcion_tienda == 2) and 11 or 6
         local col3 = (opcion_tienda == 3) and 11 or 6
@@ -1151,8 +1199,8 @@ function dibujar_juego()
         print("3. +combust max    4o", 14, 68, col3)
         print("4. salir de tienda", 14, 80, col4)
 
-								print("tu oro: " .. oro .. " o  zaf: " .. zafiro .. " z", 14, 96, 14)        
-								print("vida max: " .. (vida_max or 100), 14, 104, 8)
+        print("tu oro: " .. oro .. " o  zaf: " .. zafiro .. " z", 14, 96, 14)
+        print("vida max: " .. (vida_max or 100), 14, 104, 8)
     end
 end
 -->8
@@ -1280,7 +1328,7 @@ end
 -- jefe final: escorpios
 
 spr_pinza_izq = 23
-spr_cabeza    = 24
+spr_cabeza = 24
 spr_pinza_der = 25
 
 escorpios = nil
@@ -1288,24 +1336,24 @@ jefe_en_intro = false
 jefe_shake = 0
 
 function iniciar_jefe()
-    proyectiles_jefe  = {}
-    piedras_caendo    = {}
-    jefe_muerto       = false
+    proyectiles_jefe = {}
+    piedras_caendo = {}
+    jefe_muerto = false
     jefe_timer_muerte = 0
-    jefe_vida_max     = 100
-    jefe_vida         = jefe_vida_max
-    jefe_fase         = 1
-    jefe_en_intro     = false
-    jefe_shake        = 0
+    jefe_vida_max = 100
+    jefe_vida = jefe_vida_max
+    jefe_fase = 1
+    jefe_en_intro = false
+    jefe_shake = 0
 
     escorpios = {
         tipo = "jefe",
-        x = 184, 
+        x = 184,
         y = 232,
         vx = 0,
         vy = 0,
         v_base = 0.5,
-        radio_vision = 60, 
+        radio_vision = 60,
         danio = 15,
         confundido = false,
         timer_confusion = 0,
@@ -1315,10 +1363,11 @@ function iniciar_jefe()
         timer_estado = 0,
         timer_ataque = 0,
         timer_terremoto = 150,
-        lx = 0, 
+        timer_molestado = 0,
+        lx = 0,
         ly = 0,
-        p_dir_x = 0, 
-        p_dir_y = 1  
+        p_dir_x = 0,
+        p_dir_y = 1
     }
     -- no borramos la lista completa, solo agregamos a escorpios de forma limpia
     add(enemigos, escorpios)
@@ -1326,16 +1375,17 @@ end
 
 function actualizar_jefe(e)
     if jefe_shake > 0 then jefe_shake -= 0.2 end
+    if e.timer_molestado > 0 then e.timer_molestado -= 1 end
 
     -- 1. estado: durmiendo
     if e.estado == "durmiendo" then
         e.pinza_offset = 0
         local dx = px - e.x
         local dy = py - e.y
-        local dist = sqrt(dx*dx + dy*dy)
+        local dist = sqrt(dx * dx + dy * dy)
         if dist < 55 then
             e.estado = "despertando"
-            e.timer_estado = 120 
+            e.timer_estado = 120
             jefe_en_intro = true
             sfx(7)
         end
@@ -1365,15 +1415,15 @@ function actualizar_jefe(e)
     -- 3. estado: combate activo
     if e.estado == "combate" then
         e.pinza_offset += 0.08 * e.pinza_dir
-        if e.pinza_offset > 3  then e.pinza_dir = -1 end
-        if e.pinza_offset < -3 then e.pinza_dir =  1 end
+        if e.pinza_offset > 3 then e.pinza_dir = -1 end
+        if e.pinza_offset < -3 then e.pinza_dir = 1 end
 
         local dx = px - e.x
         local dy = py - e.y
-        local dist = sqrt(dx*dx + dy*dy)
+        local dist = sqrt(dx * dx + dy * dy)
         if dist > 0 then
-            e.vx = (dx/dist) * e.v_base
-            e.vy = (dy/dist) * e.v_base
+            e.vx = (dx / dist) * e.v_base
+            e.vy = (dy / dist) * e.v_base
         end
 
         local nx = e.x + e.vx
@@ -1389,7 +1439,7 @@ function actualizar_jefe(e)
         e.timer_terremoto -= 1
         if e.timer_terremoto <= 0 then
             e.estado = "ataque_slam"
-            e.timer_estado = 45 
+            e.timer_estado = 45
             e.vx = 0
             e.vy = 0
         end
@@ -1398,27 +1448,27 @@ function actualizar_jefe(e)
     -- anticipaciれ⧗n: carga del lれくser
     if e.estado == "carga_laser" then
         e.timer_estado -= 1
-        e.pinza_offset = sin(t()*25) * 2
+        e.pinza_offset = sin(t() * 25) * 2
         if e.timer_estado <= 0 then
             e.estado = "ataque_laser"
             e.timer_estado = 45 -- るくreducida la duraciれ⧗n a la mitad! (rれくpido y justo)
-            sfx(11) 
+            sfx(11)
         end
     end
 
     -- habilidad 1: ataque rayo laser (optimizado contra lag + corto alcance)
     if e.estado == "ataque_laser" then
         e.timer_estado -= 1
-        
+
         local factor_progreso = 1 - (e.timer_estado / 45)
         local vel_seguimiento = mid(0.5, 0.5 + (factor_progreso * 2.0), 2.5)
-        
+
         local ldx = (px + 4) - e.lx
         local ldy = (py + 4) - e.ly
-        local ldist = sqrt(ldx*ldx + ldy*ldy)
+        local ldist = sqrt(ldx * ldx + ldy * ldy)
         if ldist > 0 then
-            e.lx += (ldx/ldist) * vel_seguimiento
-            e.ly += (ldy/ldist) * vel_seguimiento
+            e.lx += (ldx / ldist) * vel_seguimiento
+            e.ly += (ldy / ldist) * vel_seguimiento
         end
 
         -- るくrango reducido a 48 pれ♪xeles maximo! (medio alcance total)
@@ -1426,8 +1476,8 @@ function actualizar_jefe(e)
         local by = e.y + 4
         local v_dx = e.lx - bx
         local v_dy = e.ly - by
-        local v_dist = sqrt(v_dx*v_dx + v_dy*v_dy)
-        
+        local v_dist = sqrt(v_dx * v_dx + v_dy * v_dy)
+
         if v_dist > 48 then
             e.lx = bx + (v_dx / v_dist) * 48
             e.ly = by + (v_dy / v_dist) * 48
@@ -1452,14 +1502,14 @@ function actualizar_jefe(e)
     -- habilidad 2: ataque pinzas extensibles
     if e.estado == "ataque_pinzas" then
         e.timer_estado -= 1
-        
+
         if e.timer_estado > 45 then
-            e.pinza_offset = -3 + sin(t()*35) * 1
+            e.pinza_offset = -3 + sin(t() * 35) * 1
         elseif e.timer_estado > 20 then
             local progreso_lanzamiento = 1 - ((e.timer_estado - 20) / 25)
             local vel_incremental = 0.3 + (progreso_lanzamiento * 2.5)
             e.pinza_offset += vel_incremental
-            
+
             if e.pinza_offset > 32 then e.pinza_offset = 32 end
         else
             e.pinza_offset -= 4.5
@@ -1469,7 +1519,7 @@ function actualizar_jefe(e)
         if timer_inmunidad <= 0 and e.timer_estado <= 45 then
             local cx = (e.x + 4) + (e.p_dir_x * e.pinza_offset)
             local cy = (e.y + 4) + (e.p_dir_y * e.pinza_offset)
-            
+
             if abs(cx - (px + 4)) < 8 and abs(cy - (py + 4)) < 8 then
                 vida = mid(0, vida - 15, 100)
                 timer_inmunidad = 30
@@ -1488,29 +1538,29 @@ function actualizar_jefe(e)
     -- 4. estado: atacando el suelo
     if e.estado == "ataque_slam" then
         e.timer_estado -= 1
-        e.pinza_offset = -6 
+        e.pinza_offset = -6
         if e.timer_estado <= 0 then
             jefe_golpe_suelo(false)
             sfx(11)
             e.estado = "vulnerable"
-            e.timer_estado = 90 
-            e.timer_terremoto = 180 + rnd(100) 
+            e.timer_estado = 90
+            e.timer_terremoto = 180 + rnd(100)
         end
     end
 
     -- 5. estado: vulnerable
     if e.estado == "vulnerable" then
         e.timer_estado -= 1
-        e.pinza_offset = 6 
+        e.pinza_offset = 6
         if e.timer_estado <= 0 then
             e.estado = "combate"
             e.timer_ataque = 0
         end
     end
 
-    if timer_inmunidad <= 0 and not e.confundido 
-       and e.estado != "carga_laser" and e.estado != "ataque_laser" and e.estado != "ataque_pinzas"
-       and abs(px - e.x) < 12 and abs(py - e.y) < 10 then
+    if timer_inmunidad <= 0 and not e.confundido
+            and e.estado != "carga_laser" and e.estado != "ataque_laser" and e.estado != "ataque_pinzas"
+            and abs(px - e.x) < 12 and abs(py - e.y) < 10 then
         aplicar_ataque_enemigo(e)
     end
 end
@@ -1518,13 +1568,13 @@ end
 function disparar_proyectil_jefe(x, y)
     local dx = px - x
     local dy = py - y
-    local dist = sqrt(dx*dx + dy*dy)
+    local dist = sqrt(dx * dx + dy * dy)
     if dist > 0 then
         local p = {
             x = x,
             y = y,
-            vx = (dx/dist) * 1.6,
-            vy = (dy/dist) * 1.6,
+            vx = (dx / dist) * 1.6,
+            vy = (dy / dist) * 1.6,
             vida_util = 90
         }
         add(proyectiles_jefe, p)
@@ -1537,8 +1587,8 @@ function actualizar_proyectiles_jefe()
         p.x += p.vx
         p.y += p.vy
         p.vida_util -= 1
-        
-        if abs(p.x - (px+4)) < 6 and abs(p.y - (py+4)) < 6 then
+
+        if abs(p.x - (px + 4)) < 6 and abs(p.y - (py + 4)) < 6 then
             if timer_inmunidad <= 0 then
                 vida = mid(0, vida - 10, 100)
                 timer_inmunidad = 30
@@ -1558,11 +1608,11 @@ function jefe_terremoto_molesto()
     local cantidad_directas = 1
     if r > 0.85 and r <= 0.97 then cantidad_directas = 2 end
     if r > 0.97 then cantidad_directas = 3 end
-    
+
     for i = 1, cantidad_directas do
         crear_piedra(escorpios.x + 4 + (i * 2) - 2, true)
     end
-    
+
     local cantidad_extras = 1 + flr(rnd(2))
     for i = 1, cantidad_extras do
         local rand_x = escorpios.x - 30 + rnd(60)
@@ -1571,11 +1621,11 @@ function jefe_terremoto_molesto()
 end
 
 function jefe_golpe_suelo(forzar_piedra_en_jefe)
-    jefe_shake = 10 
+    jefe_shake = 10
     if forzar_piedra_en_jefe then
         crear_piedra(escorpios.x + 4, true)
     end
-    
+
     local cantidad = 2 + flr(rnd(3))
     for i = 1, cantidad do
         local rand_x = escorpios.x - 40 + rnd(80)
@@ -1585,14 +1635,16 @@ end
 
 function crear_piedra(pos_x, va_a_jefe)
     local inicio_y = escorpios.y - 64
-    add(piedras_caendo, {
-        x = pos_x,
-        y = inicio_y,       
-        vy = 2.5,      
-        spr = 26,      
-        hacia_jefe = va_a_jefe,
-        suelo_y = escorpios.y + 6 
-    })
+    add(
+        piedras_caendo, {
+            x = pos_x,
+            y = inicio_y,
+            vy = 2.5,
+            spr = 26,
+            hacia_jefe = va_a_jefe,
+            suelo_y = escorpios.y + 6
+        }
+    )
 end
 
 function actualizar_piedras()
@@ -1600,35 +1652,37 @@ function actualizar_piedras()
         p.y += p.vy
         local romperse = false
         local golpe_objetivo = false
-        
+
         if abs(p.x - (px + 4)) < 6 and abs(p.y - (py + 4)) < 6 then
             vida = mid(0, vida - 25, 100)
             timer_flash_dano = 4
             romperse = true
             golpe_objetivo = true
         end
-        
+
         if not golpe_objetivo then
             local centro_jefe_x = escorpios.x + 4
             local centro_jefe_y = escorpios.y + 4
             if abs(p.x - centro_jefe_x) < 10 and abs(p.y - centro_jefe_y) < 10 then
-                jefe_recibir_danio(8) 
+                jefe_recibir_danio(8)
                 romperse = true
                 golpe_objetivo = true
             end
         end
-        
+
         if p.y >= p.suelo_y then romperse = true end
-        
+
         if romperse then
             if rnd(1) < 0.75 then
-                add(minerales, {
-                    spr = 10,
-                    x = p.x,
-                    y = p.y - 2,
-                    tipo = "carbon", 
-                    activo = true
-                })
+                add(
+                    minerales, {
+                        spr = 10,
+                        x = p.x,
+                        y = p.y - 2,
+                        tipo = "carbon",
+                        activo = true
+                    }
+                )
             end
             del(piedras_caendo, p)
         end
@@ -1638,13 +1692,13 @@ end
 function dibujar_escorpios(e)
     local po = flr(e.pinza_offset)
     palt(0, true)
-    
+
     if e.estado == "carga_laser" then
-        local r_circulo = 4 + sin(t()*15) * 2
-        local col_carga = (flr(t()*15) % 2 == 0) and 9 or 8
+        local r_circulo = 4 + sin(t() * 15) * 2
+        local col_carga = (flr(t() * 15) % 2 == 0) and 9 or 8
         circ(e.x + 4, e.y + 4, r_circulo, col_carga)
     end
-    
+
     if e.estado == "ataque_laser" then
         local rem = e.timer_estado
         if rem > 30 then
@@ -1655,23 +1709,23 @@ function dibujar_escorpios(e)
             line(e.x + 4, e.y + 4, e.lx, e.ly, 9)
         end
     end
-    
-    if e.estado == "vulnerable" and flr(t()*12)%2 == 0 then
+
+    if e.estado == "vulnerable" and flr(t() * 12) % 2 == 0 then
         -- parpadeo indicador
     else
         if e.estado == "ataque_pinzas" then
             local ox = e.p_dir_x * e.pinza_offset
             local oy = e.p_dir_y * e.pinza_offset
             spr(spr_pinza_izq, e.x - 8 + ox, e.y + oy)
-            spr(spr_cabeza,    e.x,      e.y)
+            spr(spr_cabeza, e.x, e.y)
             spr(spr_pinza_der, e.x + 8 + ox, e.y + oy)
         else
             spr(spr_pinza_izq, e.x - 8, e.y + po)
-            spr(spr_cabeza,    e.x,      e.y)
+            spr(spr_cabeza, e.x, e.y)
             spr(spr_pinza_der, e.x + 8, e.y + po)
         end
     end
-    
+
     for p in all(proyectiles_jefe) do
         circfill(p.x, p.y, 2, 11)
     end
@@ -1682,7 +1736,7 @@ function dibujar_escorpios_offset(e, ox, oy)
     local po = flr(e.pinza_offset)
     palt(0, true)
     spr(spr_pinza_izq, e.x - 8 + ox, e.y + po + oy)
-    spr(spr_cabeza,    e.x + ox,      e.y + oy)
+    spr(spr_cabeza, e.x + ox, e.y + oy)
     spr(spr_pinza_der, e.x + 8 + ox, e.y + po + oy)
     palt()
 end
@@ -1691,20 +1745,21 @@ function jefe_recibir_danio(cantidad)
     jefe_vida = mid(0, jefe_vida - cantidad, jefe_vida_max)
     sfx(7)
     if jefe_vida <= 0 and not jefe_muerto then
-        jefe_muerto       = true
+        jefe_muerto = true
         jefe_timer_muerte = 90
         sfx(6)
     end
 end
 
 function dibujar_barra_jefe()
-    if nivel_actual == 10 and escorpios and escorpios.estado != "durmiendo" and not jefe_muerto then
+    if nivel_actual == 5 and escorpios and escorpios.estado != "durmiendo" and not jefe_muerto then
         rectfill(24, 114, 104, 118, 1)
         local ancho_hp = flr((jefe_vida / jefe_vida_max) * 78)
         rectfill(25, 115, 25 + ancho_hp, 117, 8)
         print("escorpios", 46, 106, 7)
     end
 end
+
 __gfx__
 00000000005555000000000000600600000004400000000000000000000000000000000000000000000000000000000000076000000000050750650753d53535
 000000000555555000000000065555600000440000000730000440000005500000aaaa00000cc00000555500000000000007600000000055555555503aaaaa33
