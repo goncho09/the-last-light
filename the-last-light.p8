@@ -86,6 +86,9 @@ function _init()
     veces_molestado = 0
     jefe_en_intro = false
     jefe_shake = 0
+    mostrando_intro_boss = false
+    timer_ataque_jugador = 0
+    atacando_jugador = false
 
     -- logica de toy cotizado
     if toycotizado == true then
@@ -118,6 +121,14 @@ function _init()
 
     timer_intro = 60
     spr_jugador_actual = spr_jugador
+
+    -- SOLO PARA TESTING - BORRAR ANTES DE ENTREGAR
+    if modo_prueba_jefe then
+        cargar_nivel(5)
+        escena_actual = 2
+        oro = 9999
+        zafiro = 9999
+    end
 end
 -->8
 -- generacion de nivel
@@ -282,18 +293,17 @@ end
 
 function iniciar_enemigos_nivel(n)
     enemigos = {}
-    if n > 1 and n < 10 then
+    if n == 5 then
+        iniciar_jefe()
+    elseif n > 1 then
         local num_serpientes = 2
-        local num_escorpiones = (n >= 6) and 2 or 1
-
+        local num_escorpiones = (n >= 4) and 2 or 1
         for i = 1, num_serpientes do
             add(enemigos, spawn_enemigo("serpiente", spr_serpiente, 0.35, 55, 8))
         end
         for i = 1, num_escorpiones do
             add(enemigos, spawn_enemigo("escorpion", spr_escorpion, 0.2, 45, 15))
         end
-    elseif n == 5 then
-        iniciar_jefe()
     end
 end
 
@@ -594,6 +604,19 @@ function _update()
         timer_intro -= 1
         return
     end
+
+    if timer_ataque_jugador > 0 then timer_ataque_jugador -= 1 end
+    if timer_ataque_jugador < 18 then atacando_jugador = false end
+
+    if mostrando_intro_boss then
+        if btnp(5) then
+            mostrando_intro_boss = false
+            cargar_nivel(5)
+            timer_apertura = 20
+        end
+        return
+    end
+
     if escena_actual == 0 then
         if btnp(4) or btnp(5) then
             if ya_vio_instrucciones then
@@ -759,6 +782,22 @@ function _update()
         end
     end
 
+    if nivel_actual == 5 and btnp(5) and timer_ataque_jugador == 0 and not jefe_muerto then
+        timer_ataque_jugador = 25
+        atacando_jugador = true
+        sfx(3)
+        for e in all(enemigos) do
+            if e.tipo == "jefe" then
+                local adx = abs((px + 4) - (e.x + 4))
+                local ady = abs((py + 4) - (e.y + 4))
+                if adx < 14 and ady < 14 then
+                    local danio = (e.estado == "vulnerable") and 25 or 8
+                    jefe_recibir_danio(danio)
+                end
+            end
+        end
+    end
+
     -- encender antorcha con x
     if btnp(5) and not antorcha.encendida and nivel_actual != 5 then
         local dist_torch_x = abs(px - antorcha.x)
@@ -809,18 +848,21 @@ function _update()
         if timer_transicion <= 0 then
             transicion_salida = false
             mostrando_nivel_superado = true
-            timer_nivel_superado = 120
+            timer_nivel_superado = (nivel_actual == 4) and 30 or 120
         end
         return
     end
+
     if mostrando_nivel_superado then
         timer_nivel_superado -= 1
         if timer_nivel_superado <= 0 then
             mostrando_nivel_superado = false
-            if nivel_pendiente > 10 then
+            if nivel_pendiente > 5 then
                 escena_actual = 3
                 music(-1)
                 sfx(10)
+            elseif nivel_pendiente == 5 then
+                mostrando_intro_boss = true
             else
                 cargar_nivel(nivel_pendiente)
                 timer_apertura = 20
@@ -828,6 +870,7 @@ function _update()
         end
         return
     end
+
     if timer_apertura > 0 then
         timer_apertura -= 1
         radio_luz = radio_base - (radio_base * (timer_apertura / 40))
@@ -881,14 +924,15 @@ function cerrar_tienda_duende()
     en_tienda = false
     en_tienda_duende = false
     preguntando_duende = false
-    px -= 22
+    px -= 8
+
     -- empuja al jugador hacia la izquierda
     sfx(1)
 end
 
 function manejar_menu_duende()
     if preguntando_duende and not en_tienda_duende then
-        if btnp(2) or btnp(3) then
+        if btnp(0) or btnp(1) then
             opcion_pregunta_duende = 3 - opcion_pregunta_duende
         end
         if btnp(5) then
@@ -909,31 +953,28 @@ function manejar_menu_duende()
         if btnp(2) then opcion_tienda = max(1, opcion_tienda - 1) end
         if btnp(3) then opcion_tienda = min(4, opcion_tienda + 1) end
 
-        if btnp(4) then
-            if opcion_tienda == 1 and not tiene_farola and oro >= 4 then
+        if btnp(5) then
+            if opcion_tienda == 1 and not tiene_farola and zafiro >= 4 then
                 tiene_farola = true
-                oro -= 4
+                zafiro -= 4
                 sfx(2)
-            elseif opcion_tienda == 2 and zafiro >= 3 then
+            elseif opcion_tienda == 2 and oro >= 5 then
                 vida_max += 25
                 vida = vida_max
-                zafiro -= 3
+                oro -= 5
                 sfx(2)
-            elseif opcion_tienda == 3 and oro >= 2 then
+            elseif opcion_tienda == 3 and zafiro >= 5 then
                 combustible_max += 60
                 combustible = combustible_max
-                oro -= 2
+                zafiro -= 5
                 sfx(2)
             elseif opcion_tienda == 4 then
                 cerrar_tienda_duende()
             end
         end
-
-        if btnp(5) then
-            cerrar_tienda_duende()
-        end
     end
 end
+
 -->8
 -- dibujo: hud, luz, juego
 
@@ -977,7 +1018,7 @@ function dibujar_luz_personaje(scx, scy)
                 local t_dx = abs(mx_point - (antorcha.x + 4))
                 local t_dy = abs(my_point - (antorcha.y + 4))
                 local t_dist_sq = t_dx * t_dx + t_dy * t_dy
-                if t_dist_sq < 45 * 45 then luz_antorcha = true end
+                if t_dist_sq < 30 * 30 then luz_antorcha = true end
             end
 
             local luz_hoguera = false
@@ -1185,9 +1226,9 @@ function dibujar_juego()
         rect(0, 0, 127, 127, 10)
     end
 
-    -- menu de la hoguera corregido (solo descanso)
     if en_hoguera then
-        rectfill(18, 48, 110, 88, 0) rect(17, 47, 111, 89, 7)
+        rectfill(18, 48, 110, 94, 0)
+        rect(17, 47, 111, 95, 7)
         print("deseas descansar?", 24, 54, 7)
         print("recuperara tu vida", 24, 62, 6)
         if opcion_hoguera == 1 then
@@ -1200,8 +1241,8 @@ function dibujar_juego()
 
     -- mensaje de confirmation del duende
     if preguntando_duende then
-        rectfill(16, 44, 112, 84, 0)
-        rect(15, 43, 113, 85, 14)
+        rectfill(16, 44, 112, 90, 0)
+        rect(15, 43, 113, 91, 14)
         print("comerciar con", 28, 51, 7)
         print("el duende?", 28, 59, 7)
         if opcion_pregunta_duende == 1 then
@@ -1209,14 +1250,14 @@ function dibujar_juego()
         else
             print("  si", 34, 72, 5) print("> no", 78, 72, 8)
         end
-        print("x: confirmar", 36, 82, 6)
+        print("x: confirmar", 36, 84, 6)
     end
 
     -- menu de la tienda del duende
     if en_tienda then
-        rectfill(10, 24, 118, 114, 0)
-        rect(9, 23, 119, 115, 11)
-        print("--- duende mercader ---", 18, 29, 12)
+        rectfill(10, 32, 118, 122, 0)
+        rect(9, 31, 119, 123, 11)
+        print("--- duende mercader ---", 18, 36, 12)
 
         local col1 = (opcion_tienda == 1) and 11 or 6
         local col2 = (opcion_tienda == 2) and 11 or 6
@@ -1224,16 +1265,18 @@ function dibujar_juego()
         local col4 = (opcion_tienda == 4) and 11 or 8
 
         if tiene_farola then
-            print("1. farola     [comprado]", 14, 44, 5)
+            print("1. farola [comprado]", 14, 48, 5)
         else
-            print("1. farola (rango+) 8o", 14, 44, col1)
+            print("1. farola +rango", 14, 48, col1)
+            print("   costo: 4 zafiro", 14, 56, 5)
         end
-        print("2. +vida max       7z", 14, 56, col2)
-        print("3. +combust max    4o", 14, 68, col3)
-        print("4. salir de tienda", 14, 80, col4)
+        print("2. +40 vida max", 14, 66, col2)
+        print("   costo: 5 oro", 14, 74, 5)
+        print("3. +60 combustible", 14, 84, col3)
+        print("   costo: 5 zafiro", 14, 92, 5)
+        print("4. salir", 14, 102, col4)
 
-        print("tu oro: " .. oro .. " o  zaf: " .. zafiro .. " z", 14, 96, 14)
-        print("vida max: " .. (vida_max or 100), 14, 104, 8)
+        print("x:comprar", 20, 112, 5)
     end
 end
 
@@ -1335,6 +1378,27 @@ function dibujar_victoria()
     end
 end
 
+function dibujar_intro_boss()
+    camera()
+    cls(0)
+    local t1 = "nivel final"
+    print(t1, (128 - #t1 * 4) / 2, 20, 8)
+
+    local t2 = "algo oscuro te espera"
+    print(t2, (128 - #t2 * 4) / 2, 36, 6)
+
+    local t3 = "prepara tus recursos"
+    print(t3, (128 - #t3 * 4) / 2, 46, 6)
+
+    print("--- tienda disponible ---", 14, 62, 12)
+
+    local t4 = "x: enfrentar al jefe"
+    print(t4, (128 - #t4 * 4) / 2, 108, 10)
+
+    -- mostrar recursos actuales
+    print("oro:" .. oro .. " zaf:" .. zafiro, 38, 118, 14)
+end
+
 function _draw()
     if timer_intro > 0 then
         cls(0)
@@ -1359,9 +1423,17 @@ function _draw()
     if vida <= 0 then
         dibujar_game_over() return
     end
-    if mostrando_nivel_superado then
-        dibujar_nivel_superado() return
+
+    if mostrando_nivel_superado or mostrando_intro_boss then
+        if mostrando_intro_boss then
+            dibujar_intro_boss() return
+        end
+        if nivel_pendiente != 5 then
+            dibujar_nivel_superado() return
+        end
+        cls(0) return
     end
+
     dibujar_juego()
 end
 -->8
@@ -1643,7 +1715,7 @@ function actualizar_proyectiles_jefe()
 end
 
 function jefe_terremoto_molesto()
-    jefe_shake = 10
+    jefe_shake = 4
     local r = rnd(1)
     local cantidad_directas = 1
     if r > 0.85 and r <= 0.97 then cantidad_directas = 2 end
@@ -1661,7 +1733,7 @@ function jefe_terremoto_molesto()
 end
 
 function jefe_golpe_suelo(forzar_piedra_en_jefe)
-    jefe_shake = 10
+    jefe_shake = 4
     if forzar_piedra_en_jefe then
         crear_piedra(escorpios.x + 4, true)
     end
