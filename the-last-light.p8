@@ -87,8 +87,6 @@ function _init()
     jefe_en_intro = false
     jefe_shake = 0
     mostrando_intro_boss = false
-    timer_ataque_jugador = 0
-    atacando_jugador = false
 
     -- logica de toy cotizado
     if toycotizado == true then
@@ -123,12 +121,12 @@ function _init()
     spr_jugador_actual = spr_jugador
 
     -- SOLO PARA TESTING - BORRAR ANTES DE ENTREGAR
-    if modo_prueba_jefe then
-        cargar_nivel(5)
-        escena_actual = 2
-        oro = 9999
-        zafiro = 9999
-    end
+    -- if modo_prueba_jefe then
+    --     cargar_nivel(5)
+    --     escena_actual = 2
+    --     oro = 9999
+    --     zafiro = 9999
+    -- end
 end
 -->8
 -- generacion de nivel
@@ -605,9 +603,6 @@ function _update()
         return
     end
 
-    if timer_ataque_jugador > 0 then timer_ataque_jugador -= 1 end
-    if timer_ataque_jugador < 18 then atacando_jugador = false end
-
     if mostrando_intro_boss then
         if btnp(5) then
             mostrando_intro_boss = false
@@ -777,22 +772,6 @@ function _update()
                 else
                     e.confundido = true
                     e.timer_confusion = 90
-                end
-            end
-        end
-    end
-
-    if nivel_actual == 5 and btnp(5) and timer_ataque_jugador == 0 and not jefe_muerto then
-        timer_ataque_jugador = 25
-        atacando_jugador = true
-        sfx(3)
-        for e in all(enemigos) do
-            if e.tipo == "jefe" then
-                local adx = abs((px + 4) - (e.x + 4))
-                local ady = abs((py + 4) - (e.y + 4))
-                if adx < 14 and ady < 14 then
-                    local danio = (e.estado == "vulnerable") and 25 or 8
-                    jefe_recibir_danio(danio)
                 end
             end
         end
