@@ -5,7 +5,6 @@ __lua__
 -- ==========================================
 -- apartado de pruebas / debug
 modo_prueba_jefe = false
-toycotizado = false
 -- ==========================================
 -- constantes
 spr_jugador = 1
@@ -88,15 +87,6 @@ function _init()
     jefe_shake = 0
     mostrando_intro_boss = false
 
-    -- logica de toy cotizado
-    if toycotizado == true then
-        oro = 9999
-        zafiro = 9999
-    else
-        oro = 0
-        zafiro = 0
-    end
-
     vida_max = 100
     combustible_max = 100
     tiene_farola = false
@@ -120,13 +110,16 @@ function _init()
     timer_intro = 60
     spr_jugador_actual = spr_jugador
 
-    -- SOLO PARA TESTING - BORRAR ANTES DE ENTREGAR
-    -- if modo_prueba_jefe then
-    --     cargar_nivel(5)
-    --     escena_actual = 2
-    --     oro = 9999
-    --     zafiro = 9999
-    -- end
+    -- SOLO PARA TESTING
+    if modo_prueba_jefe then
+        cargar_nivel(5)
+        escena_actual = 2
+        oro = 9999
+        zafiro = 9999
+    else
+        oro = 0
+        zafiro = 0
+    end
 end
 -->8
 -- generacion de nivel
