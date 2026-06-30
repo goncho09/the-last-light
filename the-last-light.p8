@@ -4,7 +4,7 @@ __lua__
 -- the last light
 -- ==========================================
 -- apartado de pruebas / debug
-modo_prueba_jefe = true
+modo_prueba_jefe = false
 toycotizado = false
 -- ==========================================
 -- constantes
