@@ -4,7 +4,7 @@ __lua__
 -- the last light
 -- ==========================================
 -- apartado de pruebas / debug
-modo_prueba_jefe = false
+modo_prueba_jefe = true
 -- ==========================================
 -- constantes
 spr_jugador = 1
@@ -1410,7 +1410,6 @@ function _draw()
 end
 -->8
 -- jefe final: escorpios
-
 spr_pinza_izq = 23
 spr_cabeza = 24
 spr_pinza_der = 25
@@ -1453,30 +1452,43 @@ function iniciar_jefe()
         p_dir_x = 0,
         p_dir_y = 1
     }
-    -- no borramos la lista completa, solo agregamos a escorpios de forma limpia
     add(enemigos, escorpios)
 end
 
+function cerrar_arena_jefe()
+    mset(15, 31, 30)  
+    mset(15, 32, 30)  
+end
+
 function actualizar_jefe(e)
-    if jefe_shake > 0 then jefe_shake -= 0.015 end
+    if jefe_muerto then
+        jefe_shake = 0
+        return
+    end
+
+    if jefe_shake > 0 then
+        jefe_shake -= 0.2
+    end
     if e.timer_molestado > 0 then e.timer_molestado -= 1 end
 
-    -- 1. estado: durmiendo
+    -- 1. durmiendo
     if e.estado == "durmiendo" then
         e.pinza_offset = 0
         local dx = px - e.x
         local dy = py - e.y
         local dist = sqrt(dx * dx + dy * dy)
+
         if dist < 55 then
             e.estado = "despertando"
             e.timer_estado = 120
             jefe_en_intro = true
             sfx(7)
+            cerrar_arena_jefe()   -- ヌ●… cierra la arena
         end
         return
     end
 
-    -- 2. estado: despertando
+    -- 2. despertando
     if e.estado == "despertando" then
         e.timer_estado -= 1
         e.pinza_offset += 0.5 * e.pinza_dir
@@ -1496,7 +1508,7 @@ function actualizar_jefe(e)
         return
     end
 
-    -- 3. estado: combate activo
+    -- 3. combate
     if e.estado == "combate" then
         e.pinza_offset += 0.08 * e.pinza_dir
         if e.pinza_offset > 3 then e.pinza_dir = -1 end
@@ -1529,89 +1541,76 @@ function actualizar_jefe(e)
         end
     end
 
-    -- anticipaciれ⧗n: carga del lれくser
+    -- carga lれくser
     if e.estado == "carga_laser" then
         e.timer_estado -= 1
         e.pinza_offset = sin(t() * 25) * 2
         if e.timer_estado <= 0 then
             e.estado = "ataque_laser"
-            e.timer_estado = 45 -- るくreducida la duraciれ⧗n a la mitad! (rれくpido y justo)
+            e.timer_estado = 45
             sfx(11)
         end
     end
 
-    -- habilidad 1: ataque rayo laser (optimizado contra lag + corto alcance)
+    -- ataque lれくser
     if e.estado == "ataque_laser" then
         e.timer_estado -= 1
-
         local factor_progreso = 1 - (e.timer_estado / 45)
-        local vel_seguimiento = mid(0.5, 0.5 + (factor_progreso * 2.0), 2.5)
-
+        local vel_seguimiento = mid(0.5, 0.5 + (factor_progreso * 2), 2.5)
         local ldx = (px + 4) - e.lx
         local ldy = (py + 4) - e.ly
-        local ldist = sqrt(ldx * ldx + ldy * ldy)
+        local ldist = sqrt(ldx*ldx + ldy*ldy)
         if ldist > 0 then
             e.lx += (ldx / ldist) * vel_seguimiento
             e.ly += (ldy / ldist) * vel_seguimiento
         end
-
-        -- るくrango reducido a 48 pれ♪xeles maximo! (medio alcance total)
         local bx = e.x + 4
         local by = e.y + 4
         local v_dx = e.lx - bx
         local v_dy = e.ly - by
-        local v_dist = sqrt(v_dx * v_dx + v_dy * v_dy)
-
+        local v_dist = sqrt(v_dx*v_dx + v_dy*v_dy)
         if v_dist > 48 then
             e.lx = bx + (v_dx / v_dist) * 48
             e.ly = by + (v_dy / v_dist) * 48
         end
-
-        -- optimizaciれはn anti-lag: comprobaciれはn directa por proximidad en vez de bucles redundantes
         if timer_inmunidad <= 0 then
             if abs(e.lx - (px + 4)) < 8 and abs(e.ly - (py + 4)) < 8 then
-                vida = mid(0, vida - 12, 100)
+                vida = mid(0, vida - 12, vida_max)
                 timer_inmunidad = 30
                 timer_flash_dano = 6
                 sfx(7)
             end
         end
-
         if e.timer_estado <= 0 then
             e.estado = "combate"
             e.timer_ataque = 0
         end
     end
 
-    -- habilidad 2: ataque pinzas extensibles
+    -- ataque pinzas
     if e.estado == "ataque_pinzas" then
         e.timer_estado -= 1
-
         if e.timer_estado > 45 then
             e.pinza_offset = -3 + sin(t() * 35) * 1
         elseif e.timer_estado > 20 then
-            local progreso_lanzamiento = 1 - ((e.timer_estado - 20) / 25)
-            local vel_incremental = 0.3 + (progreso_lanzamiento * 2.5)
-            e.pinza_offset += vel_incremental
-
+            local progreso = 1 - ((e.timer_estado - 20) / 25)
+            local vel = 0.3 + (progreso * 2.5)
+            e.pinza_offset += vel
             if e.pinza_offset > 32 then e.pinza_offset = 32 end
         else
             e.pinza_offset -= 4.5
             if e.pinza_offset < 0 then e.pinza_offset = 0 end
         end
-
         if timer_inmunidad <= 0 and e.timer_estado <= 45 then
             local cx = (e.x + 4) + (e.p_dir_x * e.pinza_offset)
             local cy = (e.y + 4) + (e.p_dir_y * e.pinza_offset)
-
             if abs(cx - (px + 4)) < 8 and abs(cy - (py + 4)) < 8 then
-                vida = mid(0, vida - 15, 100)
+                vida = mid(0, vida - 15, vida_max)
                 timer_inmunidad = 30
                 timer_flash_dano = 6
                 sfx(7)
             end
         end
-
         if e.timer_estado <= 0 then
             e.pinza_offset = 0
             e.estado = "combate"
@@ -1619,7 +1618,7 @@ function actualizar_jefe(e)
         end
     end
 
-    -- 4. estado: atacando el suelo
+    -- slam
     if e.estado == "ataque_slam" then
         e.timer_estado -= 1
         e.pinza_offset = -6
@@ -1632,7 +1631,7 @@ function actualizar_jefe(e)
         end
     end
 
-    -- 5. estado: vulnerable
+    -- vulnerable
     if e.estado == "vulnerable" then
         e.timer_estado -= 1
         e.pinza_offset = 6
@@ -1642,26 +1641,26 @@ function actualizar_jefe(e)
         end
     end
 
+    -- colisiれはn cuerpo a cuerpo
     if timer_inmunidad <= 0 and not e.confundido
-            and e.estado != "carga_laser" and e.estado != "ataque_laser" and e.estado != "ataque_pinzas"
-            and abs(px - e.x) < 12 and abs(py - e.y) < 10 then
+        and e.estado != "carga_laser" and e.estado != "ataque_laser" and e.estado != "ataque_pinzas"
+        and abs(px - e.x) < 12 and abs(py - e.y) < 10 then
         aplicar_ataque_enemigo(e)
     end
 end
 
+-- resto de funciones (sin cambios)
 function disparar_proyectil_jefe(x, y)
     local dx = px - x
     local dy = py - y
     local dist = sqrt(dx * dx + dy * dy)
     if dist > 0 then
-        local p = {
-            x = x,
-            y = y,
+        add(proyectiles_jefe, {
+            x = x, y = y,
             vx = (dx / dist) * 1.6,
             vy = (dy / dist) * 1.6,
             vida_util = 90
-        }
-        add(proyectiles_jefe, p)
+        })
         sfx(8)
     end
 end
@@ -1671,10 +1670,9 @@ function actualizar_proyectiles_jefe()
         p.x += p.vx
         p.y += p.vy
         p.vida_util -= 1
-
         if abs(p.x - (px + 4)) < 6 and abs(p.y - (py + 4)) < 6 then
             if timer_inmunidad <= 0 then
-                vida = mid(0, vida - 10, 100)
+                vida = mid(0, vida - 10, vida_max)
                 timer_inmunidad = 30
                 timer_flash_dano = 6
                 sfx(7)
@@ -1687,16 +1685,14 @@ function actualizar_proyectiles_jefe()
 end
 
 function jefe_terremoto_molesto()
-    jefe_shake = 4
+    jefe_shake = 6
     local r = rnd(1)
     local cantidad_directas = 1
     if r > 0.85 and r <= 0.97 then cantidad_directas = 2 end
     if r > 0.97 then cantidad_directas = 3 end
-
     for i = 1, cantidad_directas do
         crear_piedra(escorpios.x + 4 + (i * 2) - 2, true)
     end
-
     local cantidad_extras = 1 + flr(rnd(2))
     for i = 1, cantidad_extras do
         local rand_x = escorpios.x - 30 + rnd(60)
@@ -1709,7 +1705,6 @@ function jefe_golpe_suelo(forzar_piedra_en_jefe)
     if forzar_piedra_en_jefe then
         crear_piedra(escorpios.x + 4, true)
     end
-
     local cantidad = 2 + flr(rnd(3))
     for i = 1, cantidad do
         local rand_x = escorpios.x - 40 + rnd(80)
@@ -1719,16 +1714,14 @@ end
 
 function crear_piedra(pos_x, va_a_jefe)
     local inicio_y = escorpios.y - 64
-    add(
-        piedras_caendo, {
-            x = pos_x,
-            y = inicio_y,
-            vy = 2.5,
-            spr = 26,
-            hacia_jefe = va_a_jefe,
-            suelo_y = escorpios.y + 6
-        }
-    )
+    add(piedras_caendo, {
+        x = pos_x,
+        y = inicio_y,
+        vy = 2.5,
+        spr = 26,
+        hacia_jefe = va_a_jefe,
+        suelo_y = escorpios.y + 6
+    })
 end
 
 function actualizar_piedras()
@@ -1736,37 +1729,25 @@ function actualizar_piedras()
         p.y += p.vy
         local romperse = false
         local golpe_objetivo = false
-
         if abs(p.x - (px + 4)) < 6 and abs(p.y - (py + 4)) < 6 then
-            vida = mid(0, vida - 25, 100)
+            vida = mid(0, vida - 25, vida_max)
             timer_flash_dano = 4
             romperse = true
             golpe_objetivo = true
         end
-
         if not golpe_objetivo then
-            local centro_jefe_x = escorpios.x + 4
-            local centro_jefe_y = escorpios.y + 4
-            if abs(p.x - centro_jefe_x) < 10 and abs(p.y - centro_jefe_y) < 10 then
+            local cx = escorpios.x + 4
+            local cy = escorpios.y + 4
+            if abs(p.x - cx) < 10 and abs(p.y - cy) < 10 then
                 jefe_recibir_danio(8)
                 romperse = true
                 golpe_objetivo = true
             end
         end
-
         if p.y >= p.suelo_y then romperse = true end
-
         if romperse then
             if rnd(1) < 0.75 then
-                add(
-                    minerales, {
-                        spr = 10,
-                        x = p.x,
-                        y = p.y - 2,
-                        tipo = "carbon",
-                        activo = true
-                    }
-                )
+                add(minerales, {spr=10, x=p.x, y=p.y-2, tipo="carbon", activo=true})
             end
             del(piedras_caendo, p)
         end
@@ -1776,40 +1757,36 @@ end
 function dibujar_escorpios(e)
     local po = flr(e.pinza_offset)
     palt(0, true)
-
     if e.estado == "carga_laser" then
-        local r_circulo = 4 + sin(t() * 15) * 2
-        local col_carga = (flr(t() * 15) % 2 == 0) and 9 or 8
-        circ(e.x + 4, e.y + 4, r_circulo, col_carga)
+        local r = 4 + sin(t()*15)*2
+        local col = (flr(t()*15)%2==0) and 9 or 8
+        circ(e.x+4, e.y+4, r, col)
     end
-
     if e.estado == "ataque_laser" then
         local rem = e.timer_estado
         if rem > 30 then
-            line(e.x + 4, e.y + 4, e.lx, e.ly, 8)
-            line(e.x + 3, e.y + 4, e.lx - 1, e.ly, 9)
-            line(e.x + 5, e.y + 4, e.lx + 1, e.ly, 10)
+            line(e.x+4, e.y+4, e.lx, e.ly, 8)
+            line(e.x+3, e.y+4, e.lx-1, e.ly, 9)
+            line(e.x+5, e.y+4, e.lx+1, e.ly, 10)
         else
-            line(e.x + 4, e.y + 4, e.lx, e.ly, 9)
+            line(e.x+4, e.y+4, e.lx, e.ly, 9)
         end
     end
-
-    if e.estado == "vulnerable" and flr(t() * 12) % 2 == 0 then
-        -- parpadeo indicador
+    if e.estado == "vulnerable" and flr(t()*12)%2 == 0 then
+        -- parpadeo
     else
         if e.estado == "ataque_pinzas" then
             local ox = e.p_dir_x * e.pinza_offset
             local oy = e.p_dir_y * e.pinza_offset
-            spr(spr_pinza_izq, e.x - 8 + ox, e.y + oy)
+            spr(spr_pinza_izq, e.x-8 + ox, e.y + oy)
             spr(spr_cabeza, e.x, e.y)
-            spr(spr_pinza_der, e.x + 8 + ox, e.y + oy)
+            spr(spr_pinza_der, e.x+8 + ox, e.y + oy)
         else
-            spr(spr_pinza_izq, e.x - 8, e.y + po)
+            spr(spr_pinza_izq, e.x-8, e.y + po)
             spr(spr_cabeza, e.x, e.y)
-            spr(spr_pinza_der, e.x + 8, e.y + po)
+            spr(spr_pinza_der, e.x+8, e.y + po)
         end
     end
-
     for p in all(proyectiles_jefe) do
         circfill(p.x, p.y, 2, 11)
     end
@@ -1819,9 +1796,9 @@ end
 function dibujar_escorpios_offset(e, ox, oy)
     local po = flr(e.pinza_offset)
     palt(0, true)
-    spr(spr_pinza_izq, e.x - 8 + ox, e.y + po + oy)
-    spr(spr_cabeza, e.x + ox, e.y + oy)
-    spr(spr_pinza_der, e.x + 8 + ox, e.y + po + oy)
+    spr(spr_pinza_izq, e.x-8+ox, e.y+po+oy)
+    spr(spr_cabeza, e.x+ox, e.y+oy)
+    spr(spr_pinza_der, e.x+8+ox, e.y+po+oy)
     palt()
 end
 
@@ -1831,6 +1808,7 @@ function jefe_recibir_danio(cantidad)
     if jefe_vida <= 0 and not jefe_muerto then
         jefe_muerto = true
         jefe_timer_muerte = 90
+        jefe_shake = 0
         sfx(6)
     end
 end
@@ -1838,12 +1816,11 @@ end
 function dibujar_barra_jefe()
     if nivel_actual == 5 and escorpios and escorpios.estado != "durmiendo" and not jefe_muerto then
         rectfill(24, 114, 104, 118, 1)
-        local ancho_hp = flr((jefe_vida / jefe_vida_max) * 78)
-        rectfill(25, 115, 25 + ancho_hp, 117, 8)
+        local ancho = flr((jefe_vida / jefe_vida_max) * 78)
+        rectfill(25, 115, 25 + ancho, 117, 8)
         print("escorpios", 46, 106, 7)
     end
 end
-
 __gfx__
 00000000005555000000000000600600000004400000000000000000000000000000000000000000000000000000000000076000000000050750650753d53535
 000000000555555000000000065555600000440000000730000440000005500000aaaa00000cc00000555500000000000007600000000055555555503aaaaa33
